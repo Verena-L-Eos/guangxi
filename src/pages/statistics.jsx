@@ -163,8 +163,8 @@ export default function StatisticsPage(props) {
 
   // 导出
   const exportCSV = (data, filename) => {
-    const headers = ['大类', '二级分类', '三级分类', '数量', '单位', '单价', '总价', '捐赠人', '快递单号', '登记时间'];
-    const rows = data.map(r => [r.category?.mainCategory || '', r.category?.subCategory || '', r.category?.thirdCategory || r.category?.spec || '', r.quantity || 0, r.unit || '', r.price || 0, ((r.price || 0) * (r.quantity || 0)).toFixed(0), r.donor || '', r.trackingNumber || '', r.createdAt ? r.createdAt.slice(0, 10) : '']);
+    const headers = ['大类', '二级分类', '三级分类', '数量', '单位', '单价', '总价', '捐赠人', '快递单号', '签收', '预计到达', '登记时间', '备注'];
+    const rows = data.map(r => [r.category?.mainCategory || '', r.category?.subCategory || '', r.category?.thirdCategory || r.category?.spec || '', r.quantity || 0, r.unit || '', r.price || 0, ((r.price || 0) * (r.quantity || 0)).toFixed(0), r.donor || '', r.trackingNumber || '', r.deliveryStatus || '', r.estimatedArrival ? r.estimatedArrival.slice(0, 10) : '', r.createdAt ? r.createdAt.slice(0, 10) : '', r.remark || '']);
     const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v}"`).join(','))].join('\n');
     const blob = new Blob(['\uFEFF' + csv], {
       type: 'text/csv;charset=utf-8;'
@@ -266,11 +266,12 @@ export default function StatisticsPage(props) {
               {isAdmin && <button onClick={exportAll} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#E8724A] text-white text-xs font-sans hover:bg-[#D4633F] transition-all shadow-sm"><Download size={14} /> 导出全部</button>}
             </div>
             {records.length > 0 ? <div className="max-h-[600px] overflow-auto">
-                <div className="flex items-center text-[10px] text-gray-400 font-sans py-2 border-b border-[#F0E6D8] sticky top-0 bg-white min-w-[1060px]">
+                <div className="flex items-center text-[10px] text-gray-400 font-sans py-2 border-b border-[#F0E6D8] sticky top-0 bg-white min-w-[1260px]">
                   <span className="w-[100px] pl-1">大类</span>
                   <span className="w-[100px]">二级分类</span>
                   <span className="w-[120px]">三级分类</span>
                   <span className="w-[60px] text-center">数量</span>
+                  <span className="w-[60px] text-center">单位</span>
                   <span className="w-[70px] text-center">单价</span>
                   <span className="w-[80px] text-center">总价</span>
                   <span className="w-[130px] text-center">快递单号</span>
@@ -278,13 +279,15 @@ export default function StatisticsPage(props) {
                   <span className="w-[110px] text-center">预计到达</span>
                   <span className="w-[90px] text-center">捐赠人</span>
                   <span className="w-[90px] text-center">登记时间</span>
+                  <span className="w-[140px] text-center">备注</span>
                 </div>
-                <div className="min-w-[1060px]">
+                <div className="min-w-[1260px]">
                   {[...records].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map((r, idx) => <div key={r._id || idx} className="flex items-start py-2.5 border-b border-[#F0E6D8]/50 hover:bg-[#FFF8F0] transition-colors text-sm">
                       <span className="w-[100px] text-gray-700 text-[11px] truncate pl-1">{r.category?.mainCategory || '-'}</span>
                       <span className="w-[100px] text-gray-600 text-[11px] truncate">{r.category?.subCategory || '-'}</span>
                       <span className="w-[120px] text-gray-500 text-[10px] truncate">{r.category?.thirdCategory || r.category?.spec || '-'}</span>
                       <span className="w-[60px] text-center font-semibold text-[#E8724A] text-[11px]">{r.quantity || 0}</span>
+                      <span className="w-[60px] text-center text-gray-500 text-[10px]">{r.unit || '-'}</span>
                       <span className="w-[70px] text-center text-gray-500 text-[10px]">¥{r.price || 0}</span>
                       <span className="w-[80px] text-center text-gray-700 text-[11px] font-medium">¥{((r.price || 0) * (r.quantity || 0)).toFixed(0)}</span>
                       <span className="w-[130px] text-center text-gray-400 text-[9px] truncate" title={r.trackingNumber}>{r.trackingNumber || '-'}</span>
@@ -292,6 +295,7 @@ export default function StatisticsPage(props) {
                       <span className="w-[110px] text-center text-gray-400 text-[10px]">{r.estimatedArrival ? r.estimatedArrival.slice(5) : '-'}</span>
                       <span className="w-[90px] text-center text-[#1B1B2F] text-[11px] font-medium truncate">{r.donor || '-'}</span>
                       <span className="w-[90px] text-center text-gray-400 text-[10px]">{r.createdAt ? r.createdAt.slice(0, 10) : '-'}</span>
+                      <span className="w-[140px] text-center text-gray-400 text-[10px] truncate" title={r.remark}>{r.remark || '-'}</span>
                     </div>)}
                 </div>
               </div> : <p className="text-center text-gray-400 py-6 text-sm">暂无捐赠记录</p>}

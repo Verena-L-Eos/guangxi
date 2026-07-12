@@ -28,9 +28,7 @@ export default function StatisticsPage(props) {
   const [dayDetails, setDayDetails] = useState([]);
 
   // 时间趋势 - 每日详情弹出
-  const [showDayDetail, setShowDayDetail] = useState(false);
-  const [selectedDate, setSelectedDate] = useState('');
-  const [dateDetailRecords, setDateDetailRecords] = useState([]);
+
   const isAdmin = Boolean($w?.auth?.currentUser?.userId);
   useEffect(() => {
     loadData();
@@ -167,26 +165,6 @@ export default function StatisticsPage(props) {
       subCategory: subCat
     });
     setDetailRecords(filtered);
-  };
-
-  // 查看每日详情 —— 按建议捐赠类别过滤
-  const showDayDetailModal = dateStr => {
-    const dayRecords = records.filter(r => r.createdAt && r.createdAt.startsWith(dateStr));
-    const suggestionNames = suggestions.flatMap(s => (s.categories || []).map(c => c.thirdCategory)).filter(Boolean);
-    const filtered = suggestionNames.length > 0 ? dayRecords.filter(r => suggestionNames.includes(r.category?.thirdCategory || r.category?.spec)) : dayRecords;
-    // 按三级分类+单位分组
-    const grouped = {};
-    filtered.forEach(r => {
-      const key = r.category?.thirdCategory || r.category?.spec || '其他';
-      if (!grouped[key]) grouped[key] = {
-        name: key,
-        items: []
-      };
-      grouped[key].items.push(r);
-    });
-    setDateDetailRecords(Object.values(grouped));
-    setSelectedDate(dateStr);
-    setShowDayDetail(true);
   };
 
   // 导出
@@ -471,52 +449,5 @@ export default function StatisticsPage(props) {
           </div>
         </div>}
 
-      {/* ======= 每日详情弹窗 ======= */}
-      {showDayDetail && <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={() => setShowDayDetail(false)}>
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div className="relative bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="sticky top-0 bg-white border-b border-[#F0E6D8] px-5 py-4">
-              <div className="flex items-center justify-between">
-                <h3 className="font-serif font-semibold text-[#1B1B2F]">📅 {selectedDate} 捐赠明细</h3>
-                <p className="text-[10px] text-gray-400 font-sans mt-0.5">按建议捐赠类别筛选</p>
-                <button onClick={() => setShowDayDetail(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200"><X size={16} className="text-gray-500" /></button>
-              </div>
-            </div>
-            <div className="overflow-y-auto max-h-[60vh] px-5 py-3 space-y-3">
-              {dateDetailRecords[0]?.items ? <>
-                  <div className="overflow-x-auto">
-                    <div className="min-w-[1000px]">
-                      <div className="flex items-center text-[10px] text-gray-400 font-sans py-2 border-b border-[#F0E6D8]">
-                        <span className="w-[50px] text-center">序号</span>
-                        <span className="w-[90px]">捐赠人</span>
-                        <span className="w-[100px]">三级分类</span>
-                        <span className="w-[80px] text-center">物品名称</span>
-                        <span className="w-[60px] text-center">件数</span>
-                        <span className="w-[60px] text-center">数量</span>
-                        <span className="w-[50px] text-center">单位</span>
-                        <span className="w-[70px] text-center">单价</span>
-                        <span className="w-[80px] text-center">总价</span>
-                        <span className="w-[120px] text-center">快递单号</span>
-                        <span className="w-[90px] text-center">预计到达</span>
-                      </div>
-                      {dateDetailRecords.flatMap(g => g.items).map((r, idx) => <div key={r._id || idx} className="flex items-start py-2.5 border-b border-[#F0E6D8]/50 hover:bg-[#FFFBF5]">
-                          <span className="w-[50px] text-center text-gray-400 text-[10px]">{idx + 1}</span>
-                          <span className="w-[90px] text-[#1B1B2F] text-[11px] font-medium truncate">{r.donor || '-'}</span>
-                          <span className="w-[100px] text-gray-500 text-[10px] truncate">{r.category?.thirdCategory || r.category?.spec || '-'}</span>
-                          <span className="w-[80px] text-center text-gray-600 text-[10px] truncate">{r.itemName || '-'}</span>
-                          <span className="w-[60px] text-center text-gray-700 text-[11px]">{r.pieces || r.quantity || 0}</span>
-                          <span className="w-[60px] text-center font-semibold text-[#E8724A] text-[11px]">{getActualTotal(r)}</span>
-                          <span className="w-[50px] text-center text-gray-400 text-[10px]">{r.unit || '-'}</span>
-                          <span className="w-[70px] text-center text-gray-500 text-[10px]">¥{r.price || 0}</span>
-                          <span className="w-[80px] text-center text-gray-700 text-[11px]">¥{((r.price || 0) * (r.pieces || r.quantity || 0)).toFixed(0)}</span>
-                          <span className="w-[120px] text-center text-gray-400 text-[9px] truncate" title={r.trackingNumber}>{r.trackingNumber || '-'}</span>
-                          <span className="w-[90px] text-center text-gray-400 text-[10px]">{r.estimatedArrival ? r.estimatedArrival.slice(5) : '-'}</span>
-                        </div>)}
-                    </div>
-                  </div>
-                </> : <p className="text-center text-gray-400 py-4 text-sm">暂无详细数据</p>}
-            </div>
-          </div>
-        </div>}
     </div>;
 }

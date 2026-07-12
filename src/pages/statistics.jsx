@@ -548,7 +548,8 @@ export default function StatisticsPage(props) {
                         <div className="flex items-center text-[10px] text-gray-400 font-sans py-2 border-b border-[#F0E6D8]">
                           <span className="w-[100px] pl-1">三级分类</span>
                           <span className="w-[60px] text-center">件数</span>
-                          <span className="w-[70px] text-center">数量</span>
+                          <span className="w-[70px] text-center">规格</span>
+                          <span className="w-[60px] text-center">总数</span>
                           <span className="w-[60px] text-center">单位</span>
                           <span className="w-[70px] text-center">单价</span>
                           <span className="w-[80px] text-center">总价</span>
@@ -556,17 +557,23 @@ export default function StatisticsPage(props) {
                           <span className="w-[100px] text-center">捐赠人</span>
                           <span className="w-[100px] text-center">登记时间</span>
                         </div>
-                        {detailRecords.map((r, idx) => <div key={r._id || idx} className="flex items-start py-2.5 border-b border-[#F0E6D8]/50 text-sm">
+                        {detailRecords.map((r, idx) => {
+                  const pieces = r.pieces || r.quantity || 0;
+                  const total = getActualTotal(r);
+                  const spec = pieces > 0 ? Math.round(total / pieces) : total;
+                  return <div key={r._id || idx} className="flex items-start py-2.5 border-b border-[#F0E6D8]/50 text-sm">
                             <span className="w-[100px] text-gray-500 text-[11px] truncate pl-1">{r.category?.thirdCategory || r.category?.spec || '-'}</span>
-                            <span className="w-[60px] text-center text-gray-700">{r.pieces || r.quantity || 0}</span>
-                            <span className="w-[70px] text-center text-[#E8724A] font-semibold text-[11px]">{getActualTotal(r)}</span>
+                            <span className="w-[60px] text-center text-gray-700">{pieces}</span>
+                            <span className="w-[70px] text-center text-gray-500 text-[11px]">{spec}</span>
+                            <span className="w-[60px] text-center text-[#E8724A] font-semibold text-[11px]">{total}</span>
                             <span className="w-[60px] text-center text-gray-400 text-[10px]">{r.unit || '-'}</span>
                             <span className="w-[70px] text-center text-gray-500 text-[10px]">¥{r.price || 0}</span>
-                            <span className="w-[80px] text-center text-gray-700 text-[11px]">¥{((r.price || 0) * (r.pieces || r.quantity || 0)).toFixed(0)}</span>
+                            <span className="w-[80px] text-center text-gray-700 text-[11px]">¥{((r.price || 0) * total).toFixed(0)}</span>
                             <span className="w-[110px] text-center text-gray-400 text-[9px] truncate">{r.trackingNumber || '-'}</span>
                             <span className="w-[100px] text-center text-[#1B1B2F] text-[11px] truncate">{r.donor || '-'}</span>
                             <span className="w-[100px] text-center text-gray-400 text-[10px]">{r.createdAt ? r.createdAt.slice(0, 10) : '-'}</span>
-                          </div>)}
+                          </div>;
+                })}
                       </div>
                     </div>
                   </>}

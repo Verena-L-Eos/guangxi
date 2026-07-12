@@ -63,12 +63,12 @@ export default function StatisticsPage(props) {
   };
 
   // 解析实际总数（数量×件数）：数量算式如 "24*500" → 12000
-  const getActualTotal = r => {
+  function getActualTotal(r) {
     const display = r.quantityDisplay || String(r.quantity || 0);
     const parts = String(display).split('*').map(s => parseFloat(s.trim()) || 0);
     if (parts.length === 2) return parts[0] * parts[1];
     return parts[0];
-  };
+  }
 
   // 指标
   const totalDonations = records.length;

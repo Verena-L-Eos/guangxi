@@ -78,12 +78,15 @@ export default function StatisticsPage(props) {
     $w.utils.navigateBack();
   };
 
-  // 解析实际总数（数量×件数）：数量算式如 "24*500" → 12000
+  // 解析实际总数（件数 × 规格）：数量算式如 "24*500" → 12000，"3*24*500" → 36000（3件×24包×500/包）
   function getActualTotal(r) {
-    const display = r.quantityDisplay || String(r.quantity || 0);
-    const parts = String(display).split('*').map(s => parseFloat(s.trim()) || 0);
-    if (parts.length === 2) return parts[0] * parts[1];
-    return parts[0];
+    const display = r.quantityDisplay;
+    if (display && String(display).trim()) {
+      const parts = String(display).split('*').map(s => parseFloat(s.trim()) || 0);
+      const total = parts.reduce((a, b) => a * b, 1);
+      if (total > 0) return total;
+    }
+    return r.quantity || r.pieces || 0;
   }
 
   // 指标

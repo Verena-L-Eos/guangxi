@@ -373,7 +373,7 @@ export default function StatisticsPage(props) {
                         </span>
                         <span className="w-[70px] text-center">单位</span>
                         <span className="w-[100px] text-center">查看</span>
-                        {isAdmin && <span className="w-[100px] text-right">导出</span>}
+                        {isAdmin && <span className="w-[100px] text-center">导出</span>}
                       </div>
                       {/* 数据行 */}
                       {flatStats.map((row, idx) => <div key={`${row.mainCategory}-${row.subCategory}-${row.thirdCategory}-${idx}`} className="flex items-center py-2.5 border-b border-[#F0E6D8]/50 hover:bg-[#FFF8F0] transition-colors text-sm">
@@ -385,8 +385,8 @@ export default function StatisticsPage(props) {
                           <span className="w-[100px] text-center">
                             <button onClick={() => showSubDetail(row.mainCategory, row.subCategory)} className="text-[#2D6A4F] text-xs hover:underline flex items-center justify-center gap-0.5"><Eye size={11} /> 查看</button>
                           </span>
-                          {isAdmin && <span className="w-[100px] text-right">
-                              <button onClick={() => exportByCategory(row.mainCategory, row.subCategory, row.thirdCategory)} className="text-[#E8724A] text-xs hover:underline flex items-center justify-end gap-0.5"><Download size={11} /> 导出明细</button>
+                          {isAdmin && <span className="w-[100px] text-center">
+                              <button onClick={() => exportByCategory(row.mainCategory, row.subCategory, row.thirdCategory)} className="text-[#E8724A] text-xs hover:underline flex items-center justify-center gap-0.5"><Download size={11} /> 导出明细</button>
                             </span>}
                         </div>)}
                       {flatStats.length === 0 && <p className="text-center text-gray-400 py-6 text-sm">暂无匹配的统计数据</p>}

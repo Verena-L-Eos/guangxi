@@ -58,9 +58,12 @@ export default function CategoriesPage(props) {
     }
     if (t && u) {
       tree[m][s][t].add(u);
+      const uKey = `${m}-${s}-${t}`;
+      if (!unitMap[uKey]) unitMap[uKey] = new Set();
+      unitMap[uKey].add(u);
     }
     mainSet.add(m);
-    secondMap[m].add(s);
+    if (s) secondMap[m].add(s);
   });
   const [expandedMain, setExpandedMain] = useState({});
   const [expandedSecond, setExpandedSecond] = useState({});

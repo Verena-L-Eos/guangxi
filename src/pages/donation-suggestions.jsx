@@ -61,15 +61,19 @@ export default function DonationSuggestionsPage(props) {
     }
   };
 
-  // Build tree from allThird: main -> sub -> [third]
+  // Build tree from allThird + selected (ensure selected categories always visible for echo-back)
   const tree = {};
-  allThird.forEach(c => {
+  const mergeCat = c => {
+    if (!c || !c.mainCategory || !c.thirdCategory) return;
     if (!tree[c.mainCategory]) tree[c.mainCategory] = {};
     if (!tree[c.mainCategory][c.subCategory]) tree[c.mainCategory][c.subCategory] = [];
     if (!tree[c.mainCategory][c.subCategory].some(t => t.thirdCategory === c.thirdCategory)) {
       tree[c.mainCategory][c.subCategory].push(c);
     }
-  });
+  };
+  allThird.forEach(mergeCat);
+  // 回显容错：selected 中不在类目库里的分类也补充进树，避免编辑时丢失
+  selected.forEach(mergeCat);
   const mainCats = Object.keys(tree);
   const catKey = c => `${c.mainCategory}/${c.subCategory}/${c.thirdCategory}`;
   const isSelected = c => selected.some(s => catKey(s) === catKey(c));
@@ -129,14 +133,29 @@ export default function DonationSuggestionsPage(props) {
     }
   };
   const handleEdit = item => {
+    const cats = item.categories || [];
     setEditItem(item);
-    setSelected(item.categories || []);
+    setSelected(cats);
+    // 自动展开包含已选分类的大类，便于用户立即看到勾选状态
+    const exp = {};
+    cats.forEach(c => {
+      if (c.mainCategory) exp[c.mainCategory] = true;
+    });
+    setExpandedMain(exp);
     setShowForm(true);
-    setPickerOpen(false);
+    setPickerOpen(true);
     setError('');
   };
+  const [deletingId, setDeletingId] = useState('');
   const handleDelete = async id => {
-    if (!window.confirm('确定要删除此建议类别？')) return;
+    if (deletingId) return;
+    // 二次确认（框架环境若不支持 window.confirm 则跳过直接删除）
+    try {
+      if (typeof window !== 'undefined' && window.confirm && !window.confirm('确定要删除此建议类别？')) {
+        return;
+      }
+    } catch (_) {/* confirm 不可用则继续 */}
+    setDeletingId(id);
     try {
       const tcb = await $w.cloud.getCloudInstance();
       const db = tcb.database();
@@ -152,6 +171,8 @@ export default function DonationSuggestionsPage(props) {
         description: e?.message || '请重试',
         variant: 'destructive'
       });
+    } finally {
+      setDeletingId('');
     }
   };
   const openAddForm = () => {
@@ -291,8 +312,8 @@ export default function DonationSuggestionsPage(props) {
                   <button onClick={() => handleEdit(item)} className="w-8 h-8 rounded-xl bg-[#FFF8F0] hover:bg-[#FEE2D6] flex items-center justify-center transition-all" title="编辑">
                     <Edit3 size={14} className="text-[#E8724A]" />
                   </button>
-                  <button onClick={() => handleDelete(item._id)} className="w-8 h-8 rounded-xl bg-[#FFF8F0] hover:bg-red-50 flex items-center justify-center transition-all" title="删除">
-                    <Trash2 size={14} className="text-red-400" />
+                  <button onClick={() => handleDelete(item._id)} disabled={deletingId === item._id} className="w-8 h-8 rounded-xl bg-[#FFF8F0] hover:bg-red-50 flex items-center justify-center transition-all disabled:opacity-50" title="删除">
+                    {deletingId === item._id ? <Loader2 size={14} className="animate-spin text-red-400" /> : <Trash2 size={14} className="text-red-400" />}
                   </button>
                 </div>}
               </div>

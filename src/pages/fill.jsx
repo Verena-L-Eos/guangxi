@@ -305,7 +305,7 @@ export default function FillPage(props) {
               {/* Quantity with unit display */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5 font-sans">
-                  数量 <span className="text-red-400">*</span>
+                  规格 <span className="text-red-400">*</span>
                   <span className="text-gray-300 font-normal">（支持算式如 "24*500"，即每件24、共500）</span>
                   {selectedUnit && <span className="text-xs text-[#E8724A] ml-2 font-semibold">单位：{selectedUnit}</span>}
                 </label>
@@ -317,7 +317,7 @@ export default function FillPage(props) {
                   {selectedUnit && <span className="text-base font-mono font-bold text-[#E8724A] bg-[#FFF0E6] px-3 py-3 rounded-xl">{selectedUnit}</span>}
                 </div>
                 {form.quantity.trim() && qtyInfo.total > 0 && <p className="text-xs text-gray-500 mt-1 font-sans">
-                    数量统计：<span className="font-semibold text-[#1B1B2F]">{qtyInfo.total}</span> {selectedUnit}
+                    规格统计：<span className="font-semibold text-[#1B1B2F]">{qtyInfo.total}</span> {selectedUnit}
                     {qtyInfo.perUnit && <span>（{qtyInfo.pieces}件 × {qtyInfo.perUnit}{selectedUnit}/件）</span>}
                     <span className="ml-2 text-gray-400">件数：{form.pieces}</span>
                   </p>}
@@ -355,7 +355,7 @@ export default function FillPage(props) {
                 <input type="number" step="0.01" value={form.price} onChange={e => setForm({
               ...form,
               price: e.target.value
-            })} placeholder="请输入单价" className="w-full px-4 py-3 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30 focus:border-[#E8724A] transition-all" />
+            })} placeholder="请输入每件的单价" className="w-full px-4 py-3 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30 focus:border-[#E8724A] transition-all" />
               </div>
 
               {/* Tracking number */}

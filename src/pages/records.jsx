@@ -58,7 +58,8 @@ export default function RecordsPage(props) {
   const startEdit = record => {
     setEditingId(record._id);
     setEditForm({
-      quantity: record.quantity,
+      quantityDisplay: record.quantityDisplay || '',
+      pieces: record.pieces || 1,
       price: record.price,
       trackingNumber: record.trackingNumber || '',
       estimatedArrival: record.estimatedArrival || '',
@@ -77,7 +78,8 @@ export default function RecordsPage(props) {
       const tcb = await $w.cloud.getCloudInstance();
       const db = tcb.database();
       await db.collection('reports').doc(recordId).update({
-        quantity: editForm.quantity,
+        quantityDisplay: editForm.quantityDisplay,
+        pieces: parseInt(editForm.pieces) || 1,
         price: parseFloat(editForm.price),
         trackingNumber: editForm.trackingNumber,
         deliveryStatus: editForm.deliveryStatus,
@@ -114,6 +116,16 @@ export default function RecordsPage(props) {
     if (!dateStr) return '';
     const d = new Date(dateStr);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  // 解析规格表达式，返回总数量（兼容历史数据：无 quantityDisplay 时回退到 quantity/pieces）
+  const parseSpecTotal = record => {
+    const display = record.quantityDisplay;
+    if (display && display.trim()) {
+      const parts = display.split('*').map(s => parseFloat(s.trim()) || 0);
+      const total = parts.reduce((a, b) => a * b, 1);
+      if (total > 0) return total;
+    }
+    return record.quantity || record.pieces || 0;
   };
   const filterOptions = [{
     value: 'all',
@@ -164,10 +176,17 @@ export default function RecordsPage(props) {
             <div className="space-y-3">
                         <div className="grid grid-cols-2 gap-3">
                           <div>
-                            <label className="block text-xs text-gray-500 mb-1 font-sans">数量</label>
-                            <input type="number" value={editForm.quantity} onChange={e => setEditForm({
+                            <label className="block text-xs text-gray-500 mb-1 font-sans">规格（支持算式如 "24*500"）</label>
+                            <input type="text" value={editForm.quantityDisplay} onChange={e => setEditForm({
                     ...editForm,
-                    quantity: parseInt(e.target.value) || 1
+                    quantityDisplay: e.target.value
+                  })} className="w-full px-3 py-2 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30" />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1 font-sans">件数</label>
+                            <input type="number" min="1" value={editForm.pieces} onChange={e => setEditForm({
+                    ...editForm,
+                    pieces: parseInt(e.target.value) || 1
                   })} className="w-full px-3 py-2 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30" />
                           </div>
                           <div>
@@ -175,7 +194,7 @@ export default function RecordsPage(props) {
                             <input type="number" step="0.01" value={editForm.price} onChange={e => setEditForm({
                     ...editForm,
                     price: e.target.value
-                  })} className="w-full px-3 py-2 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30" />
+                  })} placeholder="请输入每件的单价" className="w-full px-3 py-2 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30" />
                           </div>
                         </div>
                         <div>
@@ -231,7 +250,8 @@ export default function RecordsPage(props) {
                               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#FFE8D6] text-[#E8724A] text-xs font-sans"><Package size={10} /> {record.category?.subCategory || record.category?.mainCategory || '未分类'}</span>
                               {record.category?.thirdCategory && <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#FFF8E1] text-amber-700 text-xs font-sans">{record.category.thirdCategory}</span>}
                               {record.category?.spec && !record.category?.thirdCategory && <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#FFF8E1] text-amber-700 text-xs font-sans">{record.category.spec}</span>}
-                              <span className="text-xs text-gray-400 font-sans">{record.quantity}件</span>
+                              {record.quantityDisplay && <span className="text-xs text-gray-400 font-sans">规格：{record.quantityDisplay}</span>}
+                              {record.pieces != null && <span className="text-xs text-gray-400 font-sans">件数：{record.pieces}</span>}
                             </div>
                             <div className="mt-2 space-y-1">
                               {record.server && <p className="text-xs text-gray-500 font-sans">区服：{record.server}</p>}
@@ -246,7 +266,7 @@ export default function RecordsPage(props) {
                             <p className="text-xs text-gray-400 mt-2 font-sans">登记时间：{formatDate(record.createdAt)}</p>
                           </div>
                           <div className="flex flex-col items-end gap-2 flex-shrink-0 ml-3">
-                            <p className="text-lg font-bold text-[#2D6A4F] font-serif">¥{((record.price || 0) * (record.quantity || 0)).toFixed(0)}</p>
+                            <p className="text-lg font-bold text-[#2D6A4F] font-serif">¥{((record.price || 0) * parseSpecTotal(record)).toFixed(0)}</p>
                             {isAdmin && <div className="flex gap-1.5">
                                 <button onClick={() => startEdit(record)} className="w-8 h-8 rounded-lg bg-[#FFF0E6] flex items-center justify-center hover:bg-[#FFE0CC] transition-all" title="编辑"><Edit3 size={14} className="text-[#E8724A]" /></button>
                                 <button onClick={() => deleteRecord(record._id)} className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center hover:bg-red-100 transition-all" title="删除"><Trash2 size={14} className="text-red-500" /></button>

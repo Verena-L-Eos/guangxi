@@ -95,31 +95,53 @@ export default function DonationSuggestionsPage(props) {
     try {
       const tcb = await $w.cloud.getCloudInstance();
       const db = tcb.database();
+      let savedRecord;
       if (editItem) {
         await db.collection('suggestions').doc(editItem._id).update({
           categories: selected,
           updatedAt: new Date().toISOString()
         });
+        savedRecord = {
+          ...editItem,
+          categories: selected,
+          updatedAt: new Date().toISOString()
+        };
         toast({
           title: '保存成功',
           description: `已更新 ${selected.length} 个建议类别`
         });
       } else {
-        await db.collection('suggestions').add({
+        const addRes = await db.collection('suggestions').add({
           categories: selected,
           createdAt: new Date().toISOString(),
           createdBy: $w?.auth?.currentUser?.userId || ''
         });
+        // 兼容 add 返回 _id 在不同字段的情况
+        const newId = addRes?._id || addRes?.id || `local_${Date.now()}`;
+        savedRecord = {
+          _id: newId,
+          categories: selected,
+          createdAt: new Date().toISOString(),
+          createdBy: $w?.auth?.currentUser?.userId || ''
+        };
         toast({
           title: '添加成功',
           description: `已新增 ${selected.length} 个建议类别`
         });
       }
+      // 乐观更新本地列表，避免 get() 因集合权限/建表延迟返回空导致列表不刷新
+      setSuggestions(prev => {
+        if (editItem) {
+          return prev.map(s => s._id === editItem._id ? savedRecord : s);
+        }
+        return [...prev, savedRecord];
+      });
       setSelected([]);
       setEditItem(null);
       setShowForm(false);
       setPickerOpen(false);
-      await loadSuggestions();
+      // 后台静默刷新，失败不影响已乐观更新的列表
+      loadSuggestions().catch(() => {});
     } catch (e) {
       console.error('Save suggestion error:', e);
       setError('保存失败：' + (e?.message || '请检查数据库权限或联系管理员'));
@@ -160,7 +182,10 @@ export default function DonationSuggestionsPage(props) {
       const tcb = await $w.cloud.getCloudInstance();
       const db = tcb.database();
       await db.collection('suggestions').doc(id).remove();
-      await loadSuggestions();
+      // 乐观更新本地列表，立即从 UI 移除
+      setSuggestions(prev => prev.filter(s => s._id !== id));
+      // 后台静默刷新兜底
+      loadSuggestions().catch(() => {});
       toast({
         title: '删除成功'
       });

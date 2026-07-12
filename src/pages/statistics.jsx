@@ -78,15 +78,21 @@ export default function StatisticsPage(props) {
     $w.utils.navigateBack();
   };
 
-  // 解析实际总数（件数 × 规格）：数量算式如 "24*500" → 12000，"3*24*500" → 36000（3件×24包×500/包）
-  function getActualTotal(r) {
+  // 规格：填报时固定的数量算式（如 "24*500" → 12000），不含件数
+  function getSpecValue(r) {
     const display = r.quantityDisplay;
     if (display && String(display).trim()) {
       const parts = String(display).split('*').map(s => parseFloat(s.trim()) || 0);
-      const total = parts.reduce((a, b) => a * b, 1);
-      if (total > 0) return total;
+      const spec = parts.reduce((a, b) => a * b, 1);
+      if (spec > 0) return spec;
     }
-    return r.quantity || r.pieces || 0;
+    return r.quantity || 0;
+  }
+
+  // 实际总数 = 件数 × 规格（件数与规格相互独立）
+  function getActualTotal(r) {
+    const pieces = r.pieces || 1;
+    return pieces * getSpecValue(r);
   }
 
   // 指标
@@ -558,9 +564,9 @@ export default function StatisticsPage(props) {
                           <span className="w-[100px] text-center">登记时间</span>
                         </div>
                         {detailRecords.map((r, idx) => {
-                  const pieces = r.pieces || r.quantity || 0;
+                  const pieces = r.pieces || 0;
+                  const spec = getSpecValue(r);
                   const total = getActualTotal(r);
-                  const spec = pieces > 0 ? Math.round(total / pieces) : total;
                   return <div key={r._id || idx} className="flex items-start py-2.5 border-b border-[#F0E6D8]/50 text-sm">
                             <span className="w-[100px] text-gray-500 text-[11px] truncate pl-1">{r.category?.thirdCategory || r.category?.spec || '-'}</span>
                             <span className="w-[60px] text-center text-gray-700">{pieces}</span>
@@ -568,7 +574,7 @@ export default function StatisticsPage(props) {
                             <span className="w-[60px] text-center text-[#E8724A] font-semibold text-[11px]">{total}</span>
                             <span className="w-[60px] text-center text-gray-400 text-[10px]">{r.unit || '-'}</span>
                             <span className="w-[70px] text-center text-gray-500 text-[10px]">¥{r.price || 0}</span>
-                            <span className="w-[80px] text-center text-gray-700 text-[11px]">¥{((r.price || 0) * total).toFixed(0)}</span>
+                            <span className="w-[80px] text-center text-gray-700 text-[11px]">¥{((r.price || 0) * pieces).toFixed(0)}</span>
                             <span className="w-[110px] text-center text-gray-400 text-[9px] truncate">{r.trackingNumber || '-'}</span>
                             <span className="w-[100px] text-center text-[#1B1B2F] text-[11px] truncate">{r.donor || '-'}</span>
                             <span className="w-[100px] text-center text-gray-400 text-[10px]">{r.createdAt ? r.createdAt.slice(0, 10) : '-'}</span>

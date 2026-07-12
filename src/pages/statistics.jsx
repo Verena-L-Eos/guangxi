@@ -288,6 +288,7 @@ export default function StatisticsPage(props) {
                   <span className="w-[100px] pl-1">大类</span>
                   <span className="w-[100px]">二级分类</span>
                   <span className="w-[120px]">三级分类</span>
+                  <span className="w-[60px] text-center">件数</span>
                   <span className="w-[60px] text-center">数量</span>
                   <span className="w-[60px] text-center">单位</span>
                   <span className="w-[70px] text-center">单价</span>
@@ -304,10 +305,11 @@ export default function StatisticsPage(props) {
                       <span className="w-[100px] text-gray-700 text-[11px] truncate pl-1">{r.category?.mainCategory || '-'}</span>
                       <span className="w-[100px] text-gray-600 text-[11px] truncate">{r.category?.subCategory || '-'}</span>
                       <span className="w-[120px] text-gray-500 text-[10px] truncate">{r.category?.thirdCategory || r.category?.spec || '-'}</span>
-                      <span className="w-[60px] text-center font-semibold text-[#E8724A] text-[11px]">{r.quantity || 0}</span>
+                      <span className="w-[60px] text-center text-gray-700 text-[11px]">{r.pieces || r.quantity || 0}</span>
+                      <span className="w-[60px] text-center font-semibold text-[#E8724A] text-[11px]">{getActualTotal(r)}</span>
                       <span className="w-[60px] text-center text-gray-500 text-[10px]">{r.unit || '-'}</span>
                       <span className="w-[70px] text-center text-gray-500 text-[10px]">¥{r.price || 0}</span>
-                      <span className="w-[80px] text-center text-gray-700 text-[11px] font-medium">¥{((r.price || 0) * (r.quantity || 0)).toFixed(0)}</span>
+                      <span className="w-[80px] text-center text-gray-700 text-[11px] font-medium">¥{((r.price || 0) * (r.pieces || r.quantity || 0)).toFixed(0)}</span>
                       <span className="w-[130px] text-center text-gray-400 text-[9px] truncate" title={r.trackingNumber}>{r.trackingNumber || '-'}</span>
                       <span className="w-[80px] text-center"><span className={`inline-block text-[10px] px-1 py-0.5 rounded-full font-sans ${r.deliveryStatus === '已签收' ? 'bg-green-50 text-green-700' : r.deliveryStatus === '已发货' ? 'bg-blue-50 text-blue-700' : 'bg-gray-50 text-gray-500'}`}>{r.deliveryStatus || '待发货'}</span></span>
                       <span className="w-[110px] text-center text-gray-400 text-[10px]">{r.estimatedArrival ? r.estimatedArrival.slice(5) : '-'}</span>
@@ -375,7 +377,7 @@ export default function StatisticsPage(props) {
                         </span>
                         <span className="w-[70px] text-center">单位</span>
                         <span className="w-[100px] text-center">查看</span>
-                        {isAdmin && <span className="w-[100px] text-right">导出</span>}
+                        {isAdmin && <span className="w-[100px] text-center">导出</span>}
                       </div>
                       {/* 数据行 */}
                       {flatStats.map((row, idx) => <div key={`${row.mainCategory}-${row.subCategory}-${row.thirdCategory}-${idx}`} className="flex items-center py-2.5 border-b border-[#F0E6D8]/50 hover:bg-[#FFF8F0] transition-colors text-sm">
@@ -387,8 +389,8 @@ export default function StatisticsPage(props) {
                           <span className="w-[100px] text-center">
                             <button onClick={() => showSubDetail(row.mainCategory, row.subCategory)} className="text-[#2D6A4F] text-xs hover:underline flex items-center justify-center gap-0.5"><Eye size={11} /> 查看</button>
                           </span>
-                          {isAdmin && <span className="w-[100px] text-right">
-                              <button onClick={() => exportByCategory(row.mainCategory, row.subCategory, row.thirdCategory)} className="text-[#E8724A] text-xs hover:underline flex items-center justify-end gap-0.5"><Download size={11} /> 导出明细</button>
+                          {isAdmin && <span className="w-[100px] text-center">
+                              <button onClick={() => exportByCategory(row.mainCategory, row.subCategory, row.thirdCategory)} className="text-[#E8724A] text-xs hover:underline flex items-center justify-center gap-0.5"><Download size={11} /> 导出明细</button>
                             </span>}
                         </div>)}
                       {flatStats.length === 0 && <p className="text-center text-gray-400 py-6 text-sm">暂无匹配的统计数据</p>}
@@ -529,7 +531,7 @@ export default function StatisticsPage(props) {
                             <span className="w-[70px] text-center text-[#E8724A] font-semibold text-[11px]">{getActualTotal(r)}</span>
                             <span className="w-[60px] text-center text-gray-400 text-[10px]">{r.unit || '-'}</span>
                             <span className="w-[70px] text-center text-gray-500 text-[10px]">¥{r.price || 0}</span>
-                            <span className="w-[80px] text-center text-gray-700 text-[11px]">¥{((r.price || 0) * getActualTotal(r)).toFixed(0)}</span>
+                            <span className="w-[80px] text-center text-gray-700 text-[11px]">¥{((r.price || 0) * (r.pieces || r.quantity || 0)).toFixed(0)}</span>
                             <span className="w-[110px] text-center text-gray-400 text-[9px] truncate">{r.trackingNumber || '-'}</span>
                             <span className="w-[100px] text-center text-[#1B1B2F] text-[11px] truncate">{r.donor || '-'}</span>
                             <span className="w-[100px] text-center text-gray-400 text-[10px]">{r.createdAt ? r.createdAt.slice(0, 10) : '-'}</span>
@@ -560,6 +562,7 @@ export default function StatisticsPage(props) {
                         <span className="w-[90px]">捐赠人</span>
                         <span className="w-[100px]">三级分类</span>
                         <span className="w-[80px] text-center">物品名称</span>
+                        <span className="w-[60px] text-center">件数</span>
                         <span className="w-[60px] text-center">数量</span>
                         <span className="w-[50px] text-center">单位</span>
                         <span className="w-[70px] text-center">单价</span>
@@ -572,10 +575,11 @@ export default function StatisticsPage(props) {
                           <span className="w-[90px] text-[#1B1B2F] text-[11px] font-medium truncate">{r.donor || '-'}</span>
                           <span className="w-[100px] text-gray-500 text-[10px] truncate">{r.category?.thirdCategory || r.category?.spec || '-'}</span>
                           <span className="w-[80px] text-center text-gray-600 text-[10px] truncate">{r.itemName || '-'}</span>
+                          <span className="w-[60px] text-center text-gray-700 text-[11px]">{r.pieces || r.quantity || 0}</span>
                           <span className="w-[60px] text-center font-semibold text-[#E8724A] text-[11px]">{getActualTotal(r)}</span>
                           <span className="w-[50px] text-center text-gray-400 text-[10px]">{r.unit || '-'}</span>
                           <span className="w-[70px] text-center text-gray-500 text-[10px]">¥{r.price || 0}</span>
-                          <span className="w-[80px] text-center text-gray-700 text-[11px]">¥{((r.price || 0) * getActualTotal(r)).toFixed(0)}</span>
+                          <span className="w-[80px] text-center text-gray-700 text-[11px]">¥{((r.price || 0) * (r.pieces || r.quantity || 0)).toFixed(0)}</span>
                           <span className="w-[120px] text-center text-gray-400 text-[9px] truncate" title={r.trackingNumber}>{r.trackingNumber || '-'}</span>
                           <span className="w-[90px] text-center text-gray-400 text-[10px]">{r.estimatedArrival ? r.estimatedArrival.slice(5) : '-'}</span>
                         </div>)}

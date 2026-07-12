@@ -13,12 +13,28 @@ export default function RecordsPage(props) {
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [categories, setCategories] = useState([]);
+  const [editMain, setEditMain] = useState('');
+  const [editSecond, setEditSecond] = useState('');
+  const [editThird, setEditThird] = useState('');
+  const [editUnit, setEditUnit] = useState('');
   const [searchText, setSearchText] = useState('');
   const [filterType, setFilterType] = useState('all');
   const isAdmin = Boolean($w?.auth?.currentUser?.userId);
   useEffect(() => {
     loadAllRecords();
+    loadCategories();
   }, []);
+  const loadCategories = async () => {
+    try {
+      const tcb = await $w.cloud.getCloudInstance();
+      const db = tcb.database();
+      const res = await db.collection('categories').get();
+      setCategories(res.data || []);
+    } catch (e) {
+      console.error('Load categories error:', e);
+    }
+  };
   useEffect(() => {
     if (!searchText.trim()) {
       setFilteredRecords(records);
@@ -68,10 +84,18 @@ export default function RecordsPage(props) {
       deliveryStatus: record.deliveryStatus || '待发货',
       note: record.note || ''
     });
+    setEditMain(record.category?.mainCategory || '');
+    setEditSecond(record.category?.subCategory || '');
+    setEditThird(record.category?.thirdCategory || record.category?.spec || '');
+    setEditUnit(record.unit || '');
   };
   const cancelEdit = () => {
     setEditingId(null);
     setEditForm({});
+    setEditMain('');
+    setEditSecond('');
+    setEditThird('');
+    setEditUnit('');
   };
   const saveEdit = async recordId => {
     try {
@@ -87,10 +111,20 @@ export default function RecordsPage(props) {
         donor: editForm.donor,
         itemName: editForm.itemName,
         note: editForm.note,
+        category: {
+          mainCategory: editMain,
+          subCategory: editSecond,
+          thirdCategory: editThird
+        },
+        unit: editUnit,
         updatedAt: new Date().toISOString()
       });
       setEditingId(null);
       setEditForm({});
+      setEditMain('');
+      setEditSecond('');
+      setEditThird('');
+      setEditUnit('');
       loadAllRecords();
     } catch (e) {
       console.error('Update error:', e);
@@ -140,6 +174,41 @@ export default function RecordsPage(props) {
     value: 'date',
     label: '登记时间'
   }];
+  // Build category tree: mainCategory → subCategory → thirdCategory → [units]
+  const catTree = {};
+  const catUnitMap = {};
+  categories.forEach(c => {
+    const m = c.mainCategory;
+    const s = c.subCategory;
+    const t = c.thirdCategory || c.spec || '';
+    const u = c.unit || '';
+    if (!m) return;
+    if (!catTree[m]) catTree[m] = {};
+    if (s && !catTree[m][s]) catTree[m][s] = {};
+    if (t) {
+      if (s && !catTree[m][s][t]) catTree[m][s][t] = true;
+      const key = `${m}-${s}-${t}`;
+      if (!catUnitMap[key]) catUnitMap[key] = [];
+      if (u && !catUnitMap[key].includes(u)) catUnitMap[key].push(u);
+    }
+  });
+  const mainCatList = Object.keys(catTree);
+  const secondCatList = editMain ? Object.keys(catTree[editMain] || {}) : [];
+  const thirdCatList = editMain && editSecond ? Object.keys(catTree[editMain]?.[editSecond] || {}) : [];
+  const editAvailableUnits = editMain && editSecond && editThird ? catUnitMap[`${editMain}-${editSecond}-${editThird}`] || [] : [];
+  // When third category changes, reset/auto-select unit
+  useEffect(() => {
+    if (editMain && editSecond && editThird) {
+      const units = catUnitMap[`${editMain}-${editSecond}-${editThird}`] || [];
+      if (editUnit && !units.includes(editUnit)) {
+        setEditUnit('');
+      } else if (!editUnit && units.length === 1) {
+        setEditUnit(units[0]);
+      }
+    } else {
+      setEditUnit('');
+    }
+  }, [editMain, editSecond, editThird]);
   return <div className="min-h-screen pb-8 bg-[#FFF8F0]">
       <NavBar title="捐赠记录" showBack onBack={handleBack} $w={$w} />
 
@@ -174,6 +243,44 @@ export default function RecordsPage(props) {
                     {editingId === record._id ?
             // Edit mode - admin only
             <div className="space-y-3">
+                        {/* 类目三级联动选择 */}
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1 font-sans">一级类目</label>
+                          <select value={editMain} onChange={e => {
+                  setEditMain(e.target.value);
+                  setEditSecond('');
+                  setEditThird('');
+                  setEditUnit('');
+                }} className="w-full px-3 py-2 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30">
+                            <option value="">请选择</option>
+                            {mainCatList.map(m => <option key={m} value={m}>{m}</option>)}
+                          </select>
+                        </div>
+                        {editMain && <div>
+                            <label className="block text-xs text-gray-500 mb-1 font-sans">二级类目</label>
+                            <select value={editSecond} onChange={e => {
+                  setEditSecond(e.target.value);
+                  setEditThird('');
+                  setEditUnit('');
+                }} className="w-full px-3 py-2 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30">
+                              <option value="">请选择</option>
+                              {secondCatList.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                          </div>}
+                        {editMain && editSecond && <div>
+                            <label className="block text-xs text-gray-500 mb-1 font-sans">三级类目</label>
+                            <select value={editThird} onChange={e => setEditThird(e.target.value)} className="w-full px-3 py-2 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30">
+                              <option value="">请选择</option>
+                              {thirdCatList.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                          </div>}
+                        {editMain && editSecond && editThird && editAvailableUnits.length > 0 && <div>
+                            <label className="block text-xs text-gray-500 mb-1 font-sans">单位</label>
+                            <select value={editUnit} onChange={e => setEditUnit(e.target.value)} className="w-full px-3 py-2 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30">
+                              <option value="">请选择</option>
+                              {editAvailableUnits.map(u => <option key={u} value={u}>{u}</option>)}
+                            </select>
+                          </div>}
                         <div className="grid grid-cols-2 gap-3">
                           <div>
                             <label className="block text-xs text-gray-500 mb-1 font-sans">规格（可选，支持算式如 "24*500"）</label>

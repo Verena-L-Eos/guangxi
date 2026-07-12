@@ -112,11 +112,6 @@ function App() {
           const StatisticsPage = React.lazy(() => import('./pages/statistics.jsx'));
           return <StatisticsPage {...props} />;
         }
-      case 'donation-suggestions':
-        {
-          const DonationSuggestionsPage = React.lazy(() => import('./pages/donation-suggestions.jsx'));
-          return <DonationSuggestionsPage {...props} />;
-        }
       default:
         return <div className="p-8 text-center text-gray-500">页面不存在</div>;
     }

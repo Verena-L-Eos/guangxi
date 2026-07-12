@@ -3,6 +3,7 @@ import FILL from '../pages/fill.jsx';
 import RECORDS from '../pages/records.jsx';
 import CATEGORIES from '../pages/categories.jsx';
 import STATISTICS from '../pages/statistics.jsx';
+import DONATION_SUGGESTIONS from '../pages/donation-suggestions.jsx';
 export const routers = [{
   id: "home",
   component: HOME
@@ -18,4 +19,7 @@ export const routers = [{
 }, {
   id: "statistics",
   component: STATISTICS
+}, {
+  id: "donation-suggestions",
+  component: DONATION_SUGGESTIONS
 }]

@@ -1,7 +1,7 @@
 // @ts-ignore;
 import React, { useState, useEffect } from 'react';
 // @ts-ignore;
-import { Package, TrendingUp, Truck, Users, DollarSign, AlertCircle, Loader2, ChevronRight, Search, X, Eye, ChevronDown, ClipboardList, Hash } from 'lucide-react';
+import { Package, TrendingUp, Truck, Users, DollarSign, AlertCircle, Loader2, ChevronRight, Search, X, Eye, ChevronDown, ClipboardList, Hash, Download, ArrowUpDown, ArrowUp, ArrowDown, Plus, Edit3, Filter } from 'lucide-react';
 
 import { NavBar } from '@/components/NavBar.jsx';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -11,11 +11,28 @@ export default function StatisticsPage(props) {
   } = props;
   const [records, setRecords] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [expandedMain, setExpandedMain] = useState(null);
-  const [detailSub, setDetailSub] = useState(null); // { mainCategory, subCategory }
+  const [detailSub, setDetailSub] = useState(null);
   const [detailRecords, setDetailRecords] = useState([]);
+  const [sortOrder, setSortOrder] = useState({
+    key: 'totalQty',
+    dir: 'desc'
+  });
+  const [filterSecond, setFilterSecond] = useState('');
+  const [filterThird, setFilterThird] = useState('');
+  const [showSuggestionForm, setShowSuggestionForm] = useState(false);
+  const [newSuggestion, setNewSuggestion] = useState('');
+  const [expandedDay, setExpandedDay] = useState(null);
+  const [dayDetails, setDayDetails] = useState([]);
+
+  // 时间趋势 - 每日详情弹出
+  const [showDayDetail, setShowDayDetail] = useState(false);
+  const [selectedDate, setSelectedDate] = useState('');
+  const [dateDetailRecords, setDateDetailRecords] = useState([]);
+  const isAdmin = Boolean($w?.auth?.currentUser?.userId);
   useEffect(() => {
     loadData();
   }, []);
@@ -24,10 +41,19 @@ export default function StatisticsPage(props) {
       const tcb = await $w.cloud.getCloudInstance();
       const db = tcb.database();
       const [recordsRes, categoriesRes] = await Promise.all([db.collection('reports').get(), db.collection('categories').get()]);
+      let suggestionRes = {
+        data: []
+      };
+      try {
+        suggestionRes = await db.collection('suggestions').get();
+      } catch (e) {
+        // suggestions collection may not exist
+      }
       setRecords(recordsRes.data || []);
       setCategories(categoriesRes.data || []);
+      setSuggestions(suggestionRes?.data || []);
     } catch (e) {
-      console.error('Load data error:', e);
+      console.error('Load error:', e);
     } finally {
       setLoading(false);
     }
@@ -36,18 +62,14 @@ export default function StatisticsPage(props) {
     $w.utils.navigateBack();
   };
 
-  // === 统计指标 ===
+  // 指标
   const totalDonations = records.length;
-
-  // 总件数：根据快递单号统计（唯一快递单号的个数）
   const totalPackages = [...new Set(records.map(r => r.trackingNumber).filter(Boolean))].length;
-
-  // 总物资数量（累计）
   const totalQuantity = records.reduce((s, r) => s + (r.quantity || 0), 0);
   const totalValue = records.reduce((s, r) => s + (r.price || 0) * (r.quantity || 0), 0);
   const uniqueDonors = [...new Set(records.map(r => r.donor).filter(Boolean))].length;
 
-  // === 时间趋势 ===
+  // 时间趋势
   const byDate = records.reduce((acc, r) => {
     if (!r.createdAt) return acc;
     const date = r.createdAt.split('T')[0];
@@ -63,58 +85,139 @@ export default function StatisticsPage(props) {
   }, {});
   const timelineData = Object.entries(byDate).map(([date, data]) => ({
     date: date.slice(5),
+    fullDate: date,
     quantity: data.quantity,
     value: Math.round(data.value),
     count: data.count
   })).sort((a, b) => a.date.localeCompare(b.date));
 
-  // === 类目汇总（按大类 → 小类） ===
-  // 构建大类下的小类统计
+  // 类目汇总
   const mainCategories = [...new Set(categories.map(c => c.mainCategory).filter(Boolean))];
-  const getSubCategoryStats = mainCat => {
+  const getThirdCategoryStats = (mainCat, secondCat) => {
+    const thirdCatSet = {};
+    categories.filter(c => c.mainCategory === mainCat && c.subCategory === secondCat).forEach(c => {
+      const name = c.thirdCategory || c.spec;
+      const unit = c.unit || '';
+      if (!thirdCatSet[name]) thirdCatSet[name] = {
+        name,
+        unit,
+        records: []
+      };
+    });
+    records.filter(r => r.category?.mainCategory === mainCat && r.category?.subCategory === secondCat).forEach(r => {
+      const name = r.category?.thirdCategory || r.category?.spec;
+      if (thirdCatSet[name]) thirdCatSet[name].records.push(r);
+    });
+    return Object.values(thirdCatSet).map(t => ({
+      name: t.name,
+      unit: t.unit,
+      totalQty: t.records.reduce((s, r) => s + (r.quantity || 0), 0),
+      count: t.records.length
+    }));
+  };
+  const getSubCategoryStats = (mainCat, secondFilter = '', thirdFilter = '') => {
     const subCats = [...new Set(categories.filter(c => c.mainCategory === mainCat).map(c => c.subCategory).filter(Boolean))];
-    return subCats.map(sub => {
-      const subRecords = records.filter(r => r.category?.mainCategory === mainCat && r.category?.subCategory === sub);
-      const totalQty = subRecords.reduce((s, r) => s + (r.quantity || 0), 0);
-      const totalVal = subRecords.reduce((s, r) => s + (r.price || 0) * (r.quantity || 0), 0);
-      const uniqueTrackings = [...new Set(subRecords.map(r => r.trackingNumber).filter(Boolean))].length;
-      const donors = [...new Set(subRecords.map(r => r.donor).filter(Boolean))];
-      const count = subRecords.length;
+    return subCats.filter(s => !secondFilter || s === secondFilter).map(sub => {
+      const thirdStats = getThirdCategoryStats(mainCat, sub).filter(t => !thirdFilter || t.name === thirdFilter);
+      const totalQty = thirdStats.reduce((s, t) => s + t.totalQty, 0);
       return {
         name: sub,
         totalQty,
-        totalVal,
-        uniqueTrackings,
-        donors: donors.length,
-        count,
-        records: subRecords
+        thirdStats
       };
-    }).sort((a, b) => b.totalQty - a.totalQty);
+    }).filter(s => s.totalQty > 0 || !secondFilter).sort((a, b) => sortOrder.dir === 'desc' ? b.totalQty - a.totalQty : a.totalQty - b.totalQty);
   };
   const getMainCategoryStats = mainCat => {
     const subStats = getSubCategoryStats(mainCat);
     return {
       totalQty: subStats.reduce((s, i) => s + i.totalQty, 0),
-      totalVal: subStats.reduce((s, i) => s + i.totalVal, 0),
-      trackings: subStats.reduce((s, i) => s + i.uniqueTrackings, 0),
-      donors: [...new Set(subStats.flatMap(s => s.donors))].length,
-      count: subStats.reduce((s, i) => s + i.count, 0),
       subStats
     };
   };
-
-  // === 查看小类详情 ===
   const showSubDetail = (mainCat, subCat) => {
-    const filtered = records.filter(r => r.category?.mainCategory === mainCat && r.category?.subCategory === subCat).sort((a, b) => {
-      const da = a.createdAt ? new Date(a.createdAt) : new Date(0);
-      const db = b.createdAt ? new Date(b.createdAt) : new Date(0);
-      return db - da;
-    });
+    const filtered = records.filter(r => r.category?.mainCategory === mainCat && r.category?.subCategory === subCat).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     setDetailSub({
       mainCategory: mainCat,
       subCategory: subCat
     });
     setDetailRecords(filtered);
+  };
+
+  // 查看每日详情
+  const showDayDetailModal = dateStr => {
+    const dayRecords = records.filter(r => r.createdAt && r.createdAt.startsWith(dateStr));
+    // 按三级分类+单位分组
+    const grouped = {};
+    dayRecords.forEach(r => {
+      const key = r.category?.thirdCategory || r.category?.spec || '其他';
+      if (!grouped[key]) grouped[key] = {
+        name: key,
+        items: []
+      };
+      grouped[key].items.push(r);
+    });
+    setDateDetailRecords(Object.values(grouped));
+    setSelectedDate(dateStr);
+    setShowDayDetail(true);
+  };
+
+  // 导出
+  const exportCSV = (data, filename) => {
+    const headers = ['大类', '二级分类', '三级分类', '数量', '单位', '单价', '总价', '捐赠人', '快递单号', '登记时间'];
+    const rows = data.map(r => [r.category?.mainCategory || '', r.category?.subCategory || '', r.category?.thirdCategory || r.category?.spec || '', r.quantity || 0, r.unit || '', r.price || 0, ((r.price || 0) * (r.quantity || 0)).toFixed(0), r.donor || '', r.trackingNumber || '', r.createdAt ? r.createdAt.slice(0, 10) : '']);
+    const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v}"`).join(','))].join('\n');
+    const blob = new Blob(['\uFEFF' + csv], {
+      type: 'text/csv;charset=utf-8;'
+    });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${filename}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+  const exportAll = () => exportCSV(records, `全部捐赠_${new Date().toISOString().slice(0, 10)}`);
+  const exportByCategory = (mainCat, secondCat) => {
+    const filtered = records.filter(r => r.category?.mainCategory === mainCat && (!secondCat || r.category?.subCategory === secondCat));
+    exportCSV(filtered, `${mainCat}${secondCat ? '_' + secondCat : ''}_${new Date().toISOString().slice(0, 10)}`);
+  };
+
+  // 建议捐赠类别
+  const handleAddSuggestion = async () => {
+    if (!newSuggestion.trim()) return;
+    try {
+      const tcb = await $w.cloud.getCloudInstance();
+      const db = tcb.database();
+      await db.collection('suggestions').add({
+        content: newSuggestion.trim(),
+        createdAt: new Date().toISOString(),
+        createdBy: $w?.auth?.currentUser?.userId || ''
+      }).catch(() => {
+        throw new Error('suggestions_collection_missing');
+      });
+      setNewSuggestion('');
+      setShowSuggestionForm(false);
+      const res = await db.collection('suggestions').get();
+      setSuggestions(res.data || []);
+    } catch (e) {
+      if (e.message === 'suggestions_collection_missing') {
+        alert('建议捐赠类别功能暂未开放，请联系管理员创建数据集合');
+      } else {
+        console.error('Add suggestion error:', e);
+        alert('添加失败');
+      }
+    }
+  };
+  const handleDeleteSuggestion = async id => {
+    if (!window.confirm('确定删除这条建议？')) return;
+    try {
+      const tcb = await $w.cloud.getCloudInstance();
+      const db = tcb.database();
+      await db.collection('suggestions').doc(id).remove();
+      const res = await db.collection('suggestions').get();
+      setSuggestions(res.data || []);
+    } catch (e) {
+      console.error('Delete error:', e);
+    }
   };
   const tabs = [{
     id: 'overview',
@@ -132,9 +235,7 @@ export default function StatisticsPage(props) {
   if (loading) {
     return <div className="min-h-screen bg-[#FFF8F0]">
         <NavBar title="统计看板" showBack onBack={handleBack} $w={$w} />
-        <div className="flex items-center justify-center h-64">
-          <Loader2 size={24} className="animate-spin text-[#E8724A]" />
-        </div>
+        <div className="flex items-center justify-center h-64"><Loader2 size={24} className="animate-spin text-[#E8724A]" /></div>
       </div>;
   }
   return <div className="min-h-screen pb-8 bg-[#FFF8F0]">
@@ -142,140 +243,169 @@ export default function StatisticsPage(props) {
 
       {/* Tabs */}
       <div className="mx-4 mt-4">
-        <div className="bg-white rounded-2xl p-1 shadow-[0_2px_12px_rgba(0,0,0,0.06)] flex">
+        <div className="bg-white rounded-2xl p-1 shadow-card flex">
           {tabs.map(tab => {
           const Icon = tab.icon;
-          return <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 py-2.5 px-3 rounded-xl text-sm font-sans transition-all flex items-center justify-center gap-1.5 ${activeTab === tab.id ? 'bg-gradient-to-r from-[#E8724A] to-[#F4A261] text-white shadow-[0_2px_8px_rgba(232,114,74,0.3)]' : 'text-gray-500 hover:text-gray-700'}`}>
-                <Icon size={14} />
-                {tab.label}
+          return <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 py-2.5 px-3 rounded-xl text-sm font-sans transition-all flex items-center justify-center gap-1.5 ${activeTab === tab.id ? 'bg-gradient-to-r from-[#E8724A] to-[#F4A261] text-white shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>
+                <Icon size={14} /> {tab.label}
               </button>;
         })}
         </div>
       </div>
 
-      {/* ========== 总览 Tab ========== */}
-      {activeTab === 'overview' && <div className="mx-4 mt-4 space-y-4 animate-[fadeInUp_0.3s_ease-out]">
-          {/* 捐赠人数 - 简洁卡片 */}
-          <div className="bg-white rounded-2xl p-5 shadow-[0_2px_12px_rgba(0,0,0,0.06)] flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#FFE8D6] to-[#FFD6B0] flex items-center justify-center">
-              <Users size={22} className="text-[#E8724A]" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold font-serif text-[#1B1B2F]">{uniqueDonors}</p>
-              <p className="text-xs text-gray-500 font-sans">捐赠人数</p>
-            </div>
+      {/* ======= 总览 Tab ======= */}
+      {activeTab === 'overview' && <div className="mx-4 mt-4 space-y-4">
+          <div className="bg-white rounded-2xl p-5 shadow-card flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#FFE8D6] to-[#FFD6B0] flex items-center justify-center"><Users size={22} className="text-[#E8724A]" /></div>
+            <div><p className="text-2xl font-bold font-serif text-[#1B1B2F]">{uniqueDonors}</p><p className="text-xs text-gray-500 font-sans">捐赠人数</p></div>
           </div>
 
-          {/* 全部捐赠明细 - 完整记录列表 */}
-          <div className="bg-white rounded-2xl p-5 shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
-            <h3 className="font-serif font-semibold text-[#1B1B2F] mb-4 flex items-center gap-2">
-              <Eye size={16} className="text-[#2D6A4F]" />
-              全部捐赠明细
-              <span className="ml-auto text-xs font-sans font-normal text-gray-400">{records.length}条</span>
-            </h3>
+          <div className="bg-white rounded-2xl p-5 shadow-card">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-serif font-semibold text-[#1B1B2F] flex items-center gap-2"><Eye size={16} className="text-[#2D6A4F]" /> 全部捐赠明细 <span className="text-xs font-sans font-normal text-gray-400">{records.length}条</span></h3>
+              {isAdmin && <button onClick={exportAll} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#E8724A] text-white text-xs font-sans hover:bg-[#D4633F] transition-all shadow-sm"><Download size={14} /> 导出全部</button>}
+            </div>
             {records.length > 0 ? <div className="max-h-[600px] overflow-auto">
-                {/* 表头 */}
                 <div className="flex items-center text-[10px] text-gray-400 font-sans py-2 border-b border-[#F0E6D8] sticky top-0 bg-white min-w-[1060px]">
                   <span className="w-[100px] pl-1">大类</span>
-                  <span className="w-[100px]">小类</span>
-                  <span className="w-[120px]">名称</span>
+                  <span className="w-[100px]">二级分类</span>
+                  <span className="w-[120px]">三级分类</span>
                   <span className="w-[60px] text-center">数量</span>
                   <span className="w-[70px] text-center">单价</span>
                   <span className="w-[80px] text-center">总价</span>
                   <span className="w-[130px] text-center">快递单号</span>
                   <span className="w-[80px] text-center">签收</span>
-                  <span className="w-[110px] text-center">预计到达时间</span>
-                  <span className="w-[80px] text-center">捐赠人</span>
-                  <span className="w-[90px] text-center">备注</span>
+                  <span className="w-[110px] text-center">预计到达</span>
+                  <span className="w-[90px] text-center">捐赠人</span>
+                  <span className="w-[90px] text-center">登记时间</span>
                 </div>
                 <div className="min-w-[1060px]">
-                {[...records].sort((a, b) => {
-              const da = a.createdAt ? new Date(a.createdAt) : new Date(0);
-              const db = b.createdAt ? new Date(b.createdAt) : new Date(0);
-              return db - da;
-            }).map((r, idx) => <div key={r._id || idx} className="flex items-start py-2.5 border-b border-[#F0E6D8]/50 hover:bg-[#FFF8F0] transition-colors text-sm">
-                    <span className="w-[100px] text-gray-700 text-[11px] truncate pl-1">{r.category?.mainCategory || '-'}</span>
-                    <span className="w-[100px] text-gray-600 text-[11px] truncate">{r.category?.subCategory || '-'}</span>
-                    <span className="w-[120px] text-gray-500 text-[10px] truncate">{r.itemName || '-'}</span>
-                    <span className="w-[60px] text-center font-semibold text-[#E8724A] text-[11px]">{r.quantity || 0}</span>
-                    <span className="w-[70px] text-center text-gray-500 text-[10px]">¥{r.price || 0}</span>
-                    <span className="w-[80px] text-center text-gray-700 text-[11px] font-medium">¥{((r.price || 0) * (r.quantity || 0)).toFixed(0)}</span>
-                    <span className="w-[130px] text-center text-gray-400 text-[9px] truncate" title={r.trackingNumber}>{r.trackingNumber || '-'}</span>
-                    <span className="w-[80px] text-center">
-                      <span className={`inline-block text-[10px] px-1 py-0.5 rounded-full font-sans ${r.deliveryStatus === '已签收' ? 'bg-green-50 text-green-700' : r.deliveryStatus === '已发货' ? 'bg-blue-50 text-blue-700' : 'bg-gray-50 text-gray-500'}`}>
-                        {r.deliveryStatus || '待发货'}
-                      </span>
-                    </span>
-                    <span className="w-[110px] text-center text-gray-400 text-[10px]">{r.estimatedArrival ? r.estimatedArrival.slice(5) : '-'}</span>
-                    <span className="w-[80px] text-center text-[#1B1B2F] text-[11px] font-medium truncate">{r.donor || '-'}</span>
-                    <span className="w-[90px] text-center text-gray-400 text-[10px] truncate" title={r.note}>{r.note ? r.note.slice(0, 6) + (r.note.length > 6 ? '..' : '') : '-'}</span>
-                  </div>)}
+                  {[...records].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map((r, idx) => <div key={r._id || idx} className="flex items-start py-2.5 border-b border-[#F0E6D8]/50 hover:bg-[#FFF8F0] transition-colors text-sm">
+                      <span className="w-[100px] text-gray-700 text-[11px] truncate pl-1">{r.category?.mainCategory || '-'}</span>
+                      <span className="w-[100px] text-gray-600 text-[11px] truncate">{r.category?.subCategory || '-'}</span>
+                      <span className="w-[120px] text-gray-500 text-[10px] truncate">{r.category?.thirdCategory || r.category?.spec || '-'}</span>
+                      <span className="w-[60px] text-center font-semibold text-[#E8724A] text-[11px]">{r.quantity || 0}</span>
+                      <span className="w-[70px] text-center text-gray-500 text-[10px]">¥{r.price || 0}</span>
+                      <span className="w-[80px] text-center text-gray-700 text-[11px] font-medium">¥{((r.price || 0) * (r.quantity || 0)).toFixed(0)}</span>
+                      <span className="w-[130px] text-center text-gray-400 text-[9px] truncate" title={r.trackingNumber}>{r.trackingNumber || '-'}</span>
+                      <span className="w-[80px] text-center"><span className={`inline-block text-[10px] px-1 py-0.5 rounded-full font-sans ${r.deliveryStatus === '已签收' ? 'bg-green-50 text-green-700' : r.deliveryStatus === '已发货' ? 'bg-blue-50 text-blue-700' : 'bg-gray-50 text-gray-500'}`}>{r.deliveryStatus || '待发货'}</span></span>
+                      <span className="w-[110px] text-center text-gray-400 text-[10px]">{r.estimatedArrival ? r.estimatedArrival.slice(5) : '-'}</span>
+                      <span className="w-[90px] text-center text-[#1B1B2F] text-[11px] font-medium truncate">{r.donor || '-'}</span>
+                      <span className="w-[90px] text-center text-gray-400 text-[10px]">{r.createdAt ? r.createdAt.slice(0, 10) : '-'}</span>
+                    </div>)}
                 </div>
               </div> : <p className="text-center text-gray-400 py-6 text-sm">暂无捐赠记录</p>}
           </div>
         </div>}
 
-      {/* ========== 类目汇总 Tab ========== */}
-      {activeTab === 'category' && <div className="mx-4 mt-4 space-y-4 animate-[fadeInUp_0.3s_ease-out]">
-          {mainCategories.length === 0 ? <div className="bg-white rounded-2xl p-8 text-center shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
-              <Package size={40} className="mx-auto text-gray-300 mb-3" />
-              <p className="text-gray-400 text-sm font-sans">暂无类目数据</p>
-            </div> : mainCategories.map(mainCat => {
+      {/* ======= 类目汇总 Tab ======= */}
+      {activeTab === 'category' && <div className="mx-4 mt-4 space-y-4">
+          {/* 筛选 */}
+          {mainCategories.length > 0 && <div className="bg-white rounded-2xl p-4 shadow-card">
+              <div className="flex items-center gap-2 text-xs text-gray-500 font-sans mb-3"><Filter size={14} /> 筛选</div>
+              <div className="flex flex-wrap gap-2">
+                <select value={expandedMain || ''} onChange={e => {
+            setExpandedMain(e.target.value || null);
+            setFilterSecond('');
+            setFilterThird('');
+          }} className="px-3 py-2 rounded-xl border border-[#F0E6D8] bg-white text-sm font-sans">
+                  <option value="">全部大类</option>
+                  {mainCategories.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+                {expandedMain && <select value={filterSecond} onChange={e => setFilterSecond(e.target.value)} className="px-3 py-2 rounded-xl border border-[#F0E6D8] bg-white text-sm font-sans">
+                    <option value="">全部二级分类</option>
+                    {[...new Set(categories.filter(c => c.mainCategory === expandedMain).map(c => c.subCategory))].map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>}
+                {expandedMain && filterSecond && <select value={filterThird} onChange={e => setFilterThird(e.target.value)} className="px-3 py-2 rounded-xl border border-[#F0E6D8] bg-white text-sm font-sans">
+                    <option value="">全部三级分类</option>
+                    {categories.filter(c => c.mainCategory === expandedMain && c.subCategory === filterSecond).map(c => {
+              const name = c.thirdCategory || c.spec;
+              return <option key={c._id} value={name}>{name}</option>;
+            })}
+                  </select>}
+              </div>
+            </div>}
+
+          {mainCategories.length === 0 ? <div className="bg-white rounded-2xl p-8 text-center shadow-card"><Package size={40} className="mx-auto text-gray-300 mb-3" /><p className="text-gray-400 text-sm font-sans">暂无类目数据</p></div> : (expandedMain ? [expandedMain] : mainCategories).map(mainCat => {
         const stats = getMainCategoryStats(mainCat);
-        const isExpanded = expandedMain === mainCat;
-        return <div key={mainCat} className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.06)] overflow-hidden">
-                  {/* 大类头部 */}
-                  <button onClick={() => setExpandedMain(isExpanded ? null : mainCat)} className="w-full flex items-center justify-between p-5 hover:bg-[#FFF8F0] transition-colors">
+        const subStats = getSubCategoryStats(mainCat, filterSecond, filterThird);
+        return <div key={mainCat} className="bg-white rounded-2xl shadow-card overflow-hidden">
+                  <div className="flex items-center justify-between p-5 bg-gradient-to-r from-[#FFE8D6] to-[#FFD6B0]">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#FFE8D6] to-[#FFD6B0] flex items-center justify-center">
-                        <Package size={18} className="text-[#E8724A]" />
-                      </div>
-                      <div className="text-left">
+                      <div className="w-10 h-10 rounded-xl bg-white/80 flex items-center justify-center"><Package size={18} className="text-[#E8724A]" /></div>
+                      <div>
                         <p className="font-serif font-semibold text-[#1B1B2F]">{mainCat}</p>
-                        <p className="text-xs text-gray-400 font-sans">
-                          {stats.count}次捐赠 · 累计{stats.totalQty}件 · {stats.donors}人
-                        </p>
+                        <p className="text-xs text-gray-500 font-sans">累计 {stats.totalQty} 件</p>
                       </div>
                     </div>
-                    <ChevronDown size={18} className={`text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
-                  </button>
-
-                  {/* 小类列表（展开时） */}
-                  {isExpanded && <div className="px-5 pb-4 border-t border-[#F0E6D8]">
-                      {stats.subStats.length === 0 ? <p className="text-gray-400 text-sm py-3 text-center font-sans">暂无捐赠记录</p> : <div className="space-y-0 mt-3">
-                          {/* 小类表头 */}
-                          <div className="flex items-center text-xs text-gray-400 font-sans py-2 px-1">
-                            <span className="flex-1">小类 / 名称</span>
-                            <span className="w-14 text-center">捐赠次数</span>
-                            <span className="w-16 text-center">累计件数</span>
-                            <span className="w-14 text-center">包裹数</span>
-                            <span className="w-16 text-right">总价值</span>
-                          </div>
-                          {/* 小类列表 */}
-                          {stats.subStats.map(sub => <button key={sub.name} onClick={() => showSubDetail(mainCat, sub.name)} className="w-full flex items-center py-2.5 px-1 border-b border-[#F0E6D8]/50 hover:bg-[#FFF8F0] transition-colors rounded-lg group">
-                              <span className="flex-1 text-sm font-medium text-[#1B1B2F] flex items-center gap-1.5">
-                                <span className="w-1.5 h-1.5 rounded-full bg-[#2D6A4F]" />
-                                {sub.name}
-                              </span>
-                              <span className="w-14 text-center text-xs text-gray-500">{sub.count}</span>
-                              <span className="w-16 text-center text-xs font-semibold text-[#E8724A]">{sub.totalQty}件</span>
-                              <span className="w-14 text-center text-xs text-gray-500">{sub.uniqueTrackings}</span>
-                              <span className="w-16 text-right text-xs font-medium text-[#2D6A4F]">¥{sub.totalVal.toFixed(0)}</span>
-                              <ChevronRight size={14} className="ml-1 text-gray-300 group-hover:text-[#E8724A] transition-colors" />
-                            </button>)}
-                        </div>}
-                    </div>}
+                    {isAdmin && <button onClick={() => exportByCategory(mainCat)} className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white text-xs text-gray-600 font-sans hover:bg-gray-50 shadow-sm"><Download size={12} /> 导出</button>}
+                  </div>
+                  {/* 表头 */}
+                  <div className="px-5 pt-4">
+                    <div className="flex items-center text-xs text-gray-400 font-sans py-2 border-b border-[#F0E6D8]">
+                      <span className="flex-1">二级分类</span>
+                      <span className="w-20 text-center">三级分类</span>
+                      <span className="w-20 text-center flex items-center justify-center gap-1 cursor-pointer" onClick={() => setSortOrder(p => ({
+                key: 'totalQty',
+                dir: p.dir === 'desc' ? 'asc' : 'desc'
+              }))}>
+                        统计总数 {sortOrder.dir === 'desc' ? <ArrowDown size={12} /> : <ArrowUp size={12} />}
+                      </span>
+                      <span className="w-16 text-center">单位</span>
+                      {isAdmin && <span className="w-16 text-right">操作</span>}
+                    </div>
+                    {/* 行 */}
+                    {subStats.map(sub => <div key={sub.name}>
+                        <div className="flex items-center py-2.5 border-b border-[#F0E6D8]/50 hover:bg-[#FFF8F0] transition-colors">
+                          <span className="flex-1 text-sm text-[#1B1B2F] font-medium">{sub.name}</span>
+                          <span className="w-20 text-center text-xs text-gray-500">{sub.thirdStats.map(t => t.name).join(', ') || '-'}</span>
+                          <span className="w-20 text-center text-sm font-semibold text-[#E8724A]">{sub.totalQty}</span>
+                          <span className="w-16 text-center text-xs text-gray-400">{sub.thirdStats[0]?.unit || '-'}</span>
+                          {isAdmin && <span className="w-16 text-right">
+                              <button onClick={() => exportByCategory(mainCat, sub.name)} className="text-[#E8724A] text-xs hover:underline">导出</button>
+                            </span>}
+                        </div>
+                        {/* 三级分类明细 */}
+                        {sub.thirdStats.map(t => <div key={t.name} className="flex items-center pl-6 py-2 border-b border-[#F0E6D8]/30 text-xs text-gray-500 hover:bg-[#FFF8F0]">
+                            <span className="flex-1 text-gray-400">{t.name}</span>
+                            <span className="w-20 text-center text-gray-400">-</span>
+                            <span className="w-20 text-center font-medium text-[#1B1B2F]">{t.totalQty}</span>
+                            <span className="w-16 text-center text-gray-400">{t.unit || '-'}</span>
+                            {isAdmin && <span className="w-16 text-right"></span>}
+                          </div>)}
+                      </div>)}
+                  </div>
+                  {/* 点击查看明细 */}
+                  <div className="px-5 pb-4">
+                    <button onClick={() => showSubDetail(mainCat, filterSecond || subStats[0]?.name)} className="text-xs text-[#E8724A] hover:underline font-sans flex items-center gap-1 mt-2"><Eye size={12} /> 查看捐赠明细</button>
+                  </div>
                 </div>;
       })}
         </div>}
 
-      {/* ========== 时间趋势 Tab ========== */}
-      {activeTab === 'timeline' && <div className="mx-4 mt-4 space-y-4 animate-[fadeInUp_0.3s_ease-out]">
-          <div className="bg-white rounded-2xl p-5 shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
-            <h3 className="font-serif font-semibold text-[#1B1B2F] mb-4 flex items-center gap-2">
-              <TrendingUp size={16} className="text-[#E8724A]" />
-              捐赠数量趋势
-            </h3>
+      {/* ======= 时间趋势 Tab ======= */}
+      {activeTab === 'timeline' && <div className="mx-4 mt-4 space-y-4">
+          {/* 建议捐赠类别 */}
+          <div className="bg-white rounded-2xl p-5 shadow-card">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-serif font-semibold text-[#1B1B2F] flex items-center gap-2"><Package size={16} className="text-[#E8724A]" /> 建议捐赠类别</h3>
+              {isAdmin && <button onClick={() => setShowSuggestionForm(!showSuggestionForm)} className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#E8724A] text-white text-xs font-sans hover:bg-[#D4633F]"><Plus size={12} /> 添加</button>}
+            </div>
+            {showSuggestionForm && <div className="flex gap-2 mb-3">
+                <input type="text" value={newSuggestion} onChange={e => setNewSuggestion(e.target.value)} placeholder="输入建议的捐赠类别" className="flex-1 px-3 py-2 rounded-xl border border-[#F0E6D8] text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30" onKeyDown={e => e.key === 'Enter' && handleAddSuggestion()} />
+                <button onClick={handleAddSuggestion} className="px-4 py-2 rounded-xl bg-[#2D6A4F] text-white text-xs font-sans hover:bg-[#245A43]">确认</button>
+              </div>}
+            {suggestions.length === 0 ? <p className="text-xs text-gray-400 font-sans">暂无建议</p> : <div className="flex flex-wrap gap-2">
+                  {suggestions.map(s => <div key={s._id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#FFF0E6] text-sm text-gray-700 font-sans">
+                      <span>📋 {s.content}</span>
+                      {isAdmin && <button onClick={() => handleDeleteSuggestion(s._id)} className="text-gray-400 hover:text-red-500">✕</button>}
+                    </div>)}
+                </div>}
+          </div>
+
+          {/* 趋势图 */}
+          <div className="bg-white rounded-2xl p-5 shadow-card">
+            <h3 className="font-serif font-semibold text-[#1B1B2F] mb-4 flex items-center gap-2"><TrendingUp size={16} className="text-[#E8724A]" /> 捐赠数量趋势</h3>
             {timelineData.length > 0 ? <ResponsiveContainer width="100%" height={240}>
                 <LineChart data={timelineData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F0E6D8" />
@@ -303,85 +433,120 @@ export default function StatisticsPage(props) {
               </ResponsiveContainer> : <p className="text-center text-gray-400 py-8 text-sm">暂无数据</p>}
           </div>
 
-          <div className="bg-white rounded-2xl p-5 shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
-            <h3 className="font-serif font-semibold text-[#1B1B2F] mb-3 flex items-center gap-2">
-              <span className="w-1.5 h-5 rounded-full bg-[#2D6A4F]" />
-              每日捐赠明细
-            </h3>
+          {/* 每日捐赠明细 - 可展开 */}
+          <div className="bg-white rounded-2xl p-5 shadow-card">
+            <h3 className="font-serif font-semibold text-[#1B1B2F] mb-3 flex items-center gap-2"><span className="w-1.5 h-5 rounded-full bg-[#2D6A4F]" /> 每日捐赠明细</h3>
             {timelineData.length > 0 ? <div className="max-h-[400px] overflow-y-auto">
-                {[...timelineData].reverse().map(day => <div key={day.date} className="flex items-center justify-between py-2.5 border-b border-[#F0E6D8] last:border-0">
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-medium text-gray-700 w-16 font-sans">{day.date}</span>
-                      <span className="text-xs text-gray-400 font-sans">{day.count}次登记</span>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-[#1B1B2F]">{day.quantity}件</p>
-                      <p className="text-xs text-[#2D6A4F]">¥{day.value}</p>
-                    </div>
+                {[...timelineData].reverse().map(day => <div key={day.fullDate}>
+                    <button onClick={() => setExpandedDay(expandedDay === day.fullDate ? null : day.fullDate)} className="w-full flex items-center justify-between py-2.5 border-b border-[#F0E6D8] hover:bg-[#FFF8F0] transition-colors">
+                      <div className="flex items-center gap-3">
+                        <ChevronRight size={14} className={`text-gray-400 transition-transform ${expandedDay === day.fullDate ? 'rotate-90' : ''}`} />
+                        <span className="text-sm font-medium text-gray-700 font-sans">{day.date}</span>
+                        <span className="text-xs text-gray-400 font-sans">{day.count}次登记</span>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-semibold text-[#1B1B2F]">{day.quantity}件</p>
+                        <p className="text-xs text-[#2D6A4F]">¥{day.value}</p>
+                      </div>
+                    </button>
+                    {/* 展开详情 */}
+                    {expandedDay === day.fullDate && <div className="bg-[#FFFBF5] px-4 py-3 space-y-2">
+                        {(() => {
+                const dayRecs = records.filter(r => r.createdAt && r.createdAt.startsWith(day.fullDate));
+                const grouped = {};
+                dayRecs.forEach(r => {
+                  const key = r.category?.thirdCategory || r.category?.spec || '其他';
+                  const unit = r.unit || '';
+                  const k = `${key}|${unit}`;
+                  if (!grouped[k]) grouped[k] = {
+                    name: key,
+                    unit,
+                    totalQty: 0,
+                    count: 0
+                  };
+                  grouped[k].totalQty += r.quantity || 0;
+                  grouped[k].count += 1;
+                });
+                return Object.values(grouped).map(g => <div key={g.name} className="flex items-center justify-between py-1.5 border-b border-[#F0E6D8]/30 last:border-0 text-sm">
+                              <span className="text-gray-600 font-sans">{g.name}</span>
+                              <span className="text-[#1B1B2F] font-medium">{g.totalQty}{g.unit} <span className="text-xs text-gray-400">（{g.count}次）</span></span>
+                            </div>);
+              })()}
+                        <button onClick={() => showDayDetailModal(day.fullDate)} className="text-xs text-[#E8724A] hover:underline font-sans flex items-center gap-1 mt-2"><Eye size={12} /> 查看完整详情</button>
+                      </div>}
                   </div>)}
               </div> : <p className="text-center text-gray-400 py-4 text-sm">暂无数据</p>}
           </div>
         </div>}
 
-      {/* ========== 小类详情弹窗 ========== */}
+      {/* ======= 小类详情弹窗 ======= */}
       {detailSub && <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={() => setDetailSub(null)}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div className="relative bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[80vh] overflow-hidden animate-[fadeInUp_0.3s_ease-out]" onClick={e => e.stopPropagation()}>
-            {/* 弹窗头部 */}
+          <div className="relative bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="sticky top-0 bg-white border-b border-[#F0E6D8] px-5 py-4 z-10">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-gray-400 font-sans">{detailSub.mainCategory}</p>
+                  <p className="text-xs text-gray-400 font-sans">{detailSub.mainCategory} / {detailSub.subCategory}</p>
                   <h3 className="font-serif font-semibold text-[#1B1B2F] text-lg">{detailSub.subCategory}</h3>
                 </div>
-                <button onClick={() => setDetailSub(null)} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition-colors">
-                  <X size={16} className="text-gray-500" />
-                </button>
+                <button onClick={() => setDetailSub(null)} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200"><X size={16} className="text-gray-500" /></button>
               </div>
-              <p className="text-xs text-gray-400 font-sans mt-1">
-                共 {detailRecords.length} 条捐赠记录 · 累计 {detailRecords.reduce((s, r) => s + (r.quantity || 0), 0)} 件
-              </p>
+              <p className="text-xs text-gray-400 font-sans mt-1">共 {detailRecords.length} 条 · 累计 {detailRecords.reduce((s, r) => s + (r.quantity || 0), 0)} 件</p>
             </div>
-
-            {/* 弹窗内容 - 捐赠明细列表 */}
             <div className="overflow-y-auto max-h-[60vh] px-5 py-3">
               {detailRecords.length === 0 ? <p className="text-center text-gray-400 py-8 text-sm">暂无记录</p> : <>
-                  <div className="overflow-x-auto">
-                    <div className="min-w-[900px]">
-                      {/* 表头 - 与总览一致 */}
-                      <div className="flex items-center text-[10px] text-gray-400 font-sans py-2 border-b border-[#F0E6D8]">
-                        <span className="w-[100px] pl-1">大类</span>
-                        <span className="w-[100px]">小类</span>
-                        <span className="w-[120px]">名称</span>
-                        <span className="w-[60px] text-center">数量</span>
-                        <span className="w-[70px] text-center">单价</span>
-                        <span className="w-[80px] text-center">总价</span>
-                        <span className="w-[130px] text-center">快递单号</span>
-                        <span className="w-[80px] text-center">签收</span>
-                        <span className="w-[110px] text-center">预计到达时间</span>
-                        <span className="w-[80px] text-center">捐赠人</span>
-                        <span className="w-[90px] text-center">备注</span>
+                    <div className="overflow-x-auto">
+                      <div className="min-w-[900px]">
+                        <div className="flex items-center text-[10px] text-gray-400 font-sans py-2 border-b border-[#F0E6D8]">
+                          <span className="w-[100px] pl-1">三级分类</span>
+                          <span className="w-[60px] text-center">件数</span>
+                          <span className="w-[70px] text-center">数量</span>
+                          <span className="w-[60px] text-center">单位</span>
+                          <span className="w-[70px] text-center">单价</span>
+                          <span className="w-[80px] text-center">总价</span>
+                          <span className="w-[110px] text-center">快递单号</span>
+                          <span className="w-[100px] text-center">捐赠人</span>
+                          <span className="w-[100px] text-center">登记时间</span>
+                        </div>
+                        {detailRecords.map((r, idx) => <div key={r._id || idx} className="flex items-start py-2.5 border-b border-[#F0E6D8]/50 text-sm">
+                            <span className="w-[100px] text-gray-500 text-[11px] truncate pl-1">{r.category?.thirdCategory || r.category?.spec || '-'}</span>
+                            <span className="w-[60px] text-center text-gray-700">{r.quantity || 0}</span>
+                            <span className="w-[70px] text-center text-[#E8724A] font-semibold text-[11px]">{r.quantityDisplay || r.quantity || 0}</span>
+                            <span className="w-[60px] text-center text-gray-400 text-[10px]">{r.unit || '-'}</span>
+                            <span className="w-[70px] text-center text-gray-500 text-[10px]">¥{r.price || 0}</span>
+                            <span className="w-[80px] text-center text-gray-700 text-[11px]">¥{((r.price || 0) * (r.quantity || 0)).toFixed(0)}</span>
+                            <span className="w-[110px] text-center text-gray-400 text-[9px] truncate">{r.trackingNumber || '-'}</span>
+                            <span className="w-[100px] text-center text-[#1B1B2F] text-[11px] truncate">{r.donor || '-'}</span>
+                            <span className="w-[100px] text-center text-gray-400 text-[10px]">{r.createdAt ? r.createdAt.slice(0, 10) : '-'}</span>
+                          </div>)}
                       </div>
-                      {detailRecords.map((r, idx) => <div key={r._id || idx} className="flex items-start py-2.5 border-b border-[#F0E6D8]/50 text-sm">
-                          <span className="w-[100px] text-gray-700 text-[11px] truncate pl-1">{r.category?.mainCategory || '-'}</span>
-                          <span className="w-[100px] text-gray-600 text-[11px] truncate">{r.category?.subCategory || '-'}</span>
-                          <span className="w-[120px] text-gray-500 text-[10px] truncate">{r.itemName || '-'}</span>
-                          <span className="w-[60px] text-center font-semibold text-[#E8724A] text-[11px]">{r.quantity || 0}</span>
-                          <span className="w-[70px] text-center text-gray-500 text-[10px]">¥{r.price || 0}</span>
-                          <span className="w-[80px] text-center text-gray-700 text-[11px] font-medium">¥{((r.price || 0) * (r.quantity || 0)).toFixed(0)}</span>
-                          <span className="w-[130px] text-center text-gray-400 text-[9px] truncate" title={r.trackingNumber}>{r.trackingNumber || '-'}</span>
-                          <span className="w-[80px] text-center">
-                            <span className={`inline-block text-[10px] px-1 py-0.5 rounded-full font-sans ${r.deliveryStatus === '已签收' ? 'bg-green-50 text-green-700' : r.deliveryStatus === '已发货' ? 'bg-blue-50 text-blue-700' : 'bg-gray-50 text-gray-500'}`}>
-                              {r.deliveryStatus || '待发货'}
-                            </span>
-                          </span>
-                          <span className="w-[110px] text-center text-gray-400 text-[10px]">{r.estimatedArrival ? r.estimatedArrival.slice(5) : '-'}</span>
-                          <span className="w-[80px] text-center text-[#1B1B2F] text-[11px] font-medium truncate">{r.donor || '-'}</span>
-                          <span className="w-[90px] text-center text-gray-400 text-[10px] truncate" title={r.note}>{r.note ? r.note.slice(0, 6) + (r.note.length > 6 ? '..' : '') : '-'}</span>
-                        </div>)}
                     </div>
+                  </>}
+            </div>
+          </div>
+        </div>}
+
+      {/* ======= 每日详情弹窗 ======= */}
+      {showDayDetail && <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={() => setShowDayDetail(false)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="relative bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b border-[#F0E6D8] px-5 py-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-serif font-semibold text-[#1B1B2F]">📅 {selectedDate} 捐赠明细</h3>
+                <button onClick={() => setShowDayDetail(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200"><X size={16} className="text-gray-500" /></button>
+              </div>
+            </div>
+            <div className="overflow-y-auto max-h-[60vh] px-5 py-3 space-y-3">
+              {dateDetailRecords.map(group => <div key={group.name} className="bg-[#FFFBF5] rounded-2xl p-4">
+                  <h4 className="font-serif font-semibold text-[#1B1B2F] mb-2 flex items-center gap-2"><Package size={14} className="text-[#E8724A]" /> {group.name}</h4>
+                  <div className="space-y-1">
+                    {group.items.map((r, i) => <div key={i} className="flex items-center justify-between text-xs text-gray-600 font-sans py-1 border-b border-[#F0E6D8]/30">
+                        <span>{r.donor || '匿名'} · {r.quantity}件</span>
+                        <span className="text-[#E8724A]">{r.quantityDisplay || r.quantity}{r.unit || ''} · ¥{((r.price || 0) * (r.quantity || 0)).toFixed(0)}</span>
+                      </div>)}
                   </div>
-                </>}
+                </div>)}
+              {dateDetailRecords.length === 0 && <p className="text-center text-gray-400 py-4 text-sm">暂无详细数据</p>}
             </div>
           </div>
         </div>}

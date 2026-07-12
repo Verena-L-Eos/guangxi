@@ -266,7 +266,7 @@ export default function RecordsPage(props) {
                             <p className="text-xs text-gray-400 mt-2 font-sans">登记时间：{formatDate(record.createdAt)}</p>
                           </div>
                           <div className="flex flex-col items-end gap-2 flex-shrink-0 ml-3">
-                            <p className="text-lg font-bold text-[#2D6A4F] font-serif">¥{((record.price || 0) * parseSpecTotal(record)).toFixed(0)}</p>
+                            <p className="text-lg font-bold text-[#2D6A4F] font-serif">¥{((record.price || 0) * (record.pieces || 1)).toFixed(0)}</p>
                             {isAdmin && <div className="flex gap-1.5">
                                 <button onClick={() => startEdit(record)} className="w-8 h-8 rounded-lg bg-[#FFF0E6] flex items-center justify-center hover:bg-[#FFE0CC] transition-all" title="编辑"><Edit3 size={14} className="text-[#E8724A]" /></button>
                                 <button onClick={() => deleteRecord(record._id)} className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center hover:bg-red-100 transition-all" title="删除"><Trash2 size={14} className="text-red-500" /></button>

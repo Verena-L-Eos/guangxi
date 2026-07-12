@@ -164,7 +164,7 @@ export default function StatisticsPage(props) {
   // 查看每日详情 —— 按建议捐赠类别过滤
   const showDayDetailModal = dateStr => {
     const dayRecords = records.filter(r => r.createdAt && r.createdAt.startsWith(dateStr));
-    const suggestionNames = suggestions.map(s => s.content);
+    const suggestionNames = suggestions.flatMap(s => (s.categories || []).map(c => c.thirdCategory)).filter(Boolean);
     const filtered = suggestionNames.length > 0 ? dayRecords.filter(r => suggestionNames.includes(r.category?.thirdCategory || r.category?.spec)) : dayRecords;
     // 按三级分类+单位分组
     const grouped = {};
@@ -219,7 +219,7 @@ export default function StatisticsPage(props) {
 
   // 建议捐赠类别 —— 管理员从类目管理的三级分类中选择
   const handleToggleSuggestion = async opt => {
-    const exists = suggestions.find(s => s.content === opt.name);
+    const exists = suggestions.find(s => (s.categories || []).some(c => c.thirdCategory === opt.name && c.subCategory === opt.subCategory && c.mainCategory === opt.mainCategory));
     try {
       const tcb = await $w.cloud.getCloudInstance();
       const db = tcb.database();
@@ -227,10 +227,12 @@ export default function StatisticsPage(props) {
         await db.collection('suggestions').doc(exists._id).remove();
       } else {
         await db.collection('suggestions').add({
-          content: opt.name,
-          mainCategory: opt.mainCategory,
-          subCategory: opt.subCategory,
-          unit: opt.unit,
+          categories: [{
+            mainCategory: opt.mainCategory,
+            subCategory: opt.subCategory,
+            thirdCategory: opt.name,
+            unit: opt.unit
+          }],
           createdAt: new Date().toISOString(),
           createdBy: $w?.auth?.currentUser?.userId || ''
         }).catch(() => {
@@ -421,7 +423,7 @@ export default function StatisticsPage(props) {
             </div>
             {showSuggestionPicker && isAdmin && <div className="mb-3 max-h-[200px] overflow-y-auto rounded-xl border border-[#F0E6D8] p-2 space-y-1">
                 {thirdCategoryOptions.length === 0 ? <p className="text-xs text-gray-400 font-sans p-2">类目管理中暂无三级分类，请先前往类目管理添加</p> : thirdCategoryOptions.map(opt => {
-            const checked = suggestions.some(s => s.content === opt.name);
+            const checked = suggestions.some(s => (s.categories || []).some(c => c.thirdCategory === opt.name && c.subCategory === opt.subCategory && c.mainCategory === opt.mainCategory));
             return <button key={opt.name} onClick={() => handleToggleSuggestion(opt)} className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-sans transition-colors ${checked ? 'bg-[#FFF0E6] text-[#E8724A]' : 'hover:bg-[#FFF8F0] text-gray-700'}`}>
                       <span>{opt.name}{opt.unit ? `（${opt.unit}）` : ''}</span>
                       <span className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] ${checked ? 'bg-[#E8724A] border-[#E8724A] text-white' : 'border-gray-300'}`}>{checked ? '✓' : ''}</span>
@@ -429,15 +431,15 @@ export default function StatisticsPage(props) {
           })}
               </div>}
             {suggestions.length === 0 ? <p className="text-xs text-gray-400 font-sans">暂无建议捐赠类别，管理员可从类目管理的三级分类中选择</p> : <div className="flex flex-wrap gap-2">
-                  {suggestions.map(s => <div key={s._id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#FFF0E6] text-sm text-gray-700 font-sans">
-                      <span>📋 {s.content}{s.unit ? `（${s.unit}）` : ''}</span>
+                  {suggestions.flatMap(s => (s.categories || []).map((c, i) => <div key={`${s._id}-${i}`} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#FFF0E6] text-sm text-gray-700 font-sans">
+                      <span>📋 {c.thirdCategory}{c.unit ? `（${c.unit}）` : ''}</span>
                       {isAdmin && <button onClick={() => handleToggleSuggestion({
-              name: s.content,
-              mainCategory: s.mainCategory,
-              subCategory: s.subCategory,
-              unit: s.unit
+              name: c.thirdCategory,
+              mainCategory: c.mainCategory,
+              subCategory: c.subCategory,
+              unit: c.unit
             })} className="text-gray-400 hover:text-red-500">✕</button>}
-                    </div>)}
+                    </div>))}
                 </div>}
           </div>
 
@@ -492,7 +494,7 @@ export default function StatisticsPage(props) {
                         {(() => {
                 const dayRecs = records.filter(r => r.createdAt && r.createdAt.startsWith(day.fullDate));
                 // 仅展示建议捐赠类别中的三级分类
-                const suggestionNames = suggestions.map(s => s.content);
+                const suggestionNames = suggestions.flatMap(s => (s.categories || []).map(c => c.thirdCategory)).filter(Boolean);
                 const filtered = suggestionNames.length > 0 ? dayRecs.filter(r => suggestionNames.includes(r.category?.thirdCategory || r.category?.spec)) : dayRecs;
                 const grouped = {};
                 filtered.forEach(r => {

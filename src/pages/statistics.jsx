@@ -65,8 +65,8 @@ export default function StatisticsPage(props) {
   // 指标
   const totalDonations = records.length;
   const totalPackages = [...new Set(records.map(r => r.trackingNumber).filter(Boolean))].length;
-  const totalQuantity = records.reduce((s, r) => s + (r.quantity || 0), 0);
-  const totalValue = records.reduce((s, r) => s + (r.price || 0) * (r.quantity || 0), 0);
+  const totalQuantity = records.reduce((s, r) => s + getActualTotal(r), 0);
+  const totalValue = records.reduce((s, r) => s + (r.price || 0) * getActualTotal(r), 0);
   const uniqueDonors = [...new Set(records.map(r => r.donor).filter(Boolean))].length;
   const getActualTotal = r => {
     const display = r.quantityDisplay || String(r.quantity || 0);
@@ -85,7 +85,7 @@ export default function StatisticsPage(props) {
       count: 0
     };
     acc[date].quantity += getActualTotal(r);
-    acc[date].value += (r.price || 0) * (r.quantity || 0);
+    acc[date].value += (r.price || 0) * getActualTotal(r);
     acc[date].count += 1;
     return acc;
   }, {});
@@ -164,7 +164,7 @@ export default function StatisticsPage(props) {
   // 导出
   const exportCSV = (data, filename) => {
     const headers = ['大类', '二级分类', '三级分类', '数量', '单位', '单价', '总价', '捐赠人', '快递单号', '签收', '预计到达', '登记时间', '备注'];
-    const rows = data.map(r => [r.category?.mainCategory || '', r.category?.subCategory || '', r.category?.thirdCategory || r.category?.spec || '', r.quantity || 0, r.unit || '', r.price || 0, ((r.price || 0) * (r.quantity || 0)).toFixed(0), r.donor || '', r.trackingNumber || '', r.deliveryStatus || '', r.estimatedArrival ? r.estimatedArrival.slice(0, 10) : '', r.createdAt ? r.createdAt.slice(0, 10) : '', r.remark || '']);
+    const rows = data.map(r => [r.category?.mainCategory || '', r.category?.subCategory || '', r.category?.thirdCategory || r.category?.spec || '', getActualTotal(r), r.unit || '', r.price || 0, ((r.price || 0) * getActualTotal(r)).toFixed(0), r.donor || '', r.trackingNumber || '', r.deliveryStatus || '', r.estimatedArrival ? r.estimatedArrival.slice(0, 10) : '', r.createdAt ? r.createdAt.slice(0, 10) : '', r.remark || '']);
     const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v}"`).join(','))].join('\n');
     const blob = new Blob(['\uFEFF' + csv], {
       type: 'text/csv;charset=utf-8;'
@@ -373,7 +373,7 @@ export default function StatisticsPage(props) {
                         </span>
                         <span className="w-[70px] text-center">单位</span>
                         <span className="w-[100px] text-center">查看</span>
-                        {isAdmin && <span className="w-[100px] text-center">导出</span>}
+                        {isAdmin && <span className="w-[100px] text-right">导出</span>}
                       </div>
                       {/* 数据行 */}
                       {flatStats.map((row, idx) => <div key={`${row.mainCategory}-${row.subCategory}-${row.thirdCategory}-${idx}`} className="flex items-center py-2.5 border-b border-[#F0E6D8]/50 hover:bg-[#FFF8F0] transition-colors text-sm">
@@ -385,8 +385,8 @@ export default function StatisticsPage(props) {
                           <span className="w-[100px] text-center">
                             <button onClick={() => showSubDetail(row.mainCategory, row.subCategory)} className="text-[#2D6A4F] text-xs hover:underline flex items-center justify-center gap-0.5"><Eye size={11} /> 查看</button>
                           </span>
-                          {isAdmin && <span className="w-[100px] text-center">
-                              <button onClick={() => exportByCategory(row.mainCategory, row.subCategory, row.thirdCategory)} className="text-[#E8724A] text-xs hover:underline flex items-center justify-center gap-0.5"><Download size={11} /> 导出明细</button>
+                          {isAdmin && <span className="w-[100px] text-right">
+                              <button onClick={() => exportByCategory(row.mainCategory, row.subCategory, row.thirdCategory)} className="text-[#E8724A] text-xs hover:underline flex items-center justify-end gap-0.5"><Download size={11} /> 导出明细</button>
                             </span>}
                         </div>)}
                       {flatStats.length === 0 && <p className="text-center text-gray-400 py-6 text-sm">暂无匹配的统计数据</p>}
@@ -504,7 +504,7 @@ export default function StatisticsPage(props) {
                 </div>
                 <button onClick={() => setDetailSub(null)} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200"><X size={16} className="text-gray-500" /></button>
               </div>
-              <p className="text-xs text-gray-400 font-sans mt-1">共 {detailRecords.length} 条 · 累计 {detailRecords.reduce((s, r) => s + (r.quantity || 0), 0)} 件</p>
+              <p className="text-xs text-gray-400 font-sans mt-1">共 {detailRecords.length} 条 · 累计 {detailRecords.reduce((s, r) => s + (r.pieces || r.quantity || 0), 0)} 件 · 总数 {detailRecords.reduce((s, r) => s + getActualTotal(r), 0)}</p>
             </div>
             <div className="overflow-y-auto max-h-[60vh] px-5 py-3">
               {detailRecords.length === 0 ? <p className="text-center text-gray-400 py-8 text-sm">暂无记录</p> : <>
@@ -523,11 +523,11 @@ export default function StatisticsPage(props) {
                         </div>
                         {detailRecords.map((r, idx) => <div key={r._id || idx} className="flex items-start py-2.5 border-b border-[#F0E6D8]/50 text-sm">
                             <span className="w-[100px] text-gray-500 text-[11px] truncate pl-1">{r.category?.thirdCategory || r.category?.spec || '-'}</span>
-                            <span className="w-[60px] text-center text-gray-700">{r.quantity || 0}</span>
-                            <span className="w-[70px] text-center text-[#E8724A] font-semibold text-[11px]">{r.quantityDisplay || r.quantity || 0}</span>
+                            <span className="w-[60px] text-center text-gray-700">{r.pieces || r.quantity || 0}</span>
+                            <span className="w-[70px] text-center text-[#E8724A] font-semibold text-[11px]">{getActualTotal(r)}</span>
                             <span className="w-[60px] text-center text-gray-400 text-[10px]">{r.unit || '-'}</span>
                             <span className="w-[70px] text-center text-gray-500 text-[10px]">¥{r.price || 0}</span>
-                            <span className="w-[80px] text-center text-gray-700 text-[11px]">¥{((r.price || 0) * (r.quantity || 0)).toFixed(0)}</span>
+                            <span className="w-[80px] text-center text-gray-700 text-[11px]">¥{((r.price || 0) * getActualTotal(r)).toFixed(0)}</span>
                             <span className="w-[110px] text-center text-gray-400 text-[9px] truncate">{r.trackingNumber || '-'}</span>
                             <span className="w-[100px] text-center text-[#1B1B2F] text-[11px] truncate">{r.donor || '-'}</span>
                             <span className="w-[100px] text-center text-gray-400 text-[10px]">{r.createdAt ? r.createdAt.slice(0, 10) : '-'}</span>
@@ -570,10 +570,10 @@ export default function StatisticsPage(props) {
                           <span className="w-[90px] text-[#1B1B2F] text-[11px] font-medium truncate">{r.donor || '-'}</span>
                           <span className="w-[100px] text-gray-500 text-[10px] truncate">{r.category?.thirdCategory || r.category?.spec || '-'}</span>
                           <span className="w-[80px] text-center text-gray-600 text-[10px] truncate">{r.itemName || '-'}</span>
-                          <span className="w-[60px] text-center font-semibold text-[#E8724A] text-[11px]">{r.quantity || 0}</span>
+                          <span className="w-[60px] text-center font-semibold text-[#E8724A] text-[11px]">{getActualTotal(r)}</span>
                           <span className="w-[50px] text-center text-gray-400 text-[10px]">{r.unit || '-'}</span>
                           <span className="w-[70px] text-center text-gray-500 text-[10px]">¥{r.price || 0}</span>
-                          <span className="w-[80px] text-center text-gray-700 text-[11px]">¥{((r.price || 0) * (r.quantity || 0)).toFixed(0)}</span>
+                          <span className="w-[80px] text-center text-gray-700 text-[11px]">¥{((r.price || 0) * getActualTotal(r)).toFixed(0)}</span>
                           <span className="w-[120px] text-center text-gray-400 text-[9px] truncate" title={r.trackingNumber}>{r.trackingNumber || '-'}</span>
                           <span className="w-[90px] text-center text-gray-400 text-[10px]">{r.estimatedArrival ? r.estimatedArrival.slice(5) : '-'}</span>
                         </div>)}

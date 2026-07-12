@@ -15,39 +15,28 @@ export default function RecordsPage(props) {
   const [editForm, setEditForm] = useState({});
   const [searchText, setSearchText] = useState('');
   const [filterType, setFilterType] = useState('all');
-  const [suggestions, setSuggestions] = useState([]);
-  const [suggestFilter, setSuggestFilter] = useState(false);
   const isAdmin = Boolean($w?.auth?.currentUser?.userId);
   useEffect(() => {
-    Promise.all([loadAllRecords(), loadSuggestions()]);
+    loadAllRecords();
   }, []);
-  // Build a lookup set for quick matching
-  const suggestedKeys = new Set(suggestions.filter(s => s.mainCategory && s.subCategory && (s.thirdCategory || s.spec)).map(s => `${s.mainCategory}||${s.subCategory}||${s.thirdCategory || s.spec}`));
   useEffect(() => {
-    let result = records;
-
-    // Suggest filter: only show records matching suggested categories
-    if (suggestFilter && suggestedKeys.size > 0) {
-      result = result.filter(r => {
-        const key = `${r.category?.mainCategory || ''}||${r.category?.subCategory || ''}||${r.category?.thirdCategory || r.category?.spec || ''}`;
-        return suggestedKeys.has(key);
-      });
+    if (!searchText.trim()) {
+      setFilteredRecords(records);
+      return;
     }
-    if (searchText.trim()) {
-      const kw = searchText.trim().toLowerCase();
-      result = result.filter(r => {
-        const catStr = `${r.category?.mainCategory || ''} ${r.category?.subCategory || ''} ${r.category?.thirdCategory || r.category?.spec || ''}`.toLowerCase();
-        const donorStr = (r.donor || '').toLowerCase();
-        const dateStr = r.createdAt ? r.createdAt.slice(0, 10) : '';
-        if (filterType === 'category' && !catStr.includes(kw)) return false;
-        if (filterType === 'donor' && !donorStr.includes(kw)) return false;
-        if (filterType === 'date' && !dateStr.includes(kw)) return false;
-        if (filterType === 'all' && !catStr.includes(kw) && !donorStr.includes(kw) && !dateStr.includes(kw)) return false;
-        return true;
-      });
-    }
-    setFilteredRecords(result);
-  }, [searchText, filterType, records, suggestFilter, suggestedKeys]);
+    const kw = searchText.trim().toLowerCase();
+    setFilteredRecords(records.filter(r => {
+      // Search by category name, donor, or registration time
+      const catStr = `${r.category?.mainCategory || ''} ${r.category?.subCategory || ''} ${r.category?.thirdCategory || r.category?.spec || ''}`.toLowerCase();
+      const donorStr = (r.donor || '').toLowerCase();
+      const dateStr = r.createdAt ? r.createdAt.slice(0, 10) : '';
+      if (filterType === 'category' && !catStr.includes(kw)) return false;
+      if (filterType === 'donor' && !donorStr.includes(kw)) return false;
+      if (filterType === 'date' && !dateStr.includes(kw)) return false;
+      if (filterType === 'all' && !catStr.includes(kw) && !donorStr.includes(kw) && !dateStr.includes(kw)) return false;
+      return true;
+    }));
+  }, [searchText, filterType, records]);
   const loadAllRecords = async () => {
     try {
       const tcb = await $w.cloud.getCloudInstance();
@@ -64,17 +53,6 @@ export default function RecordsPage(props) {
       console.error('Load records error:', e);
     } finally {
       setLoading(false);
-    }
-  };
-  const loadSuggestions = async () => {
-    try {
-      const tcb = await $w.cloud.getCloudInstance();
-      const db = tcb.database();
-      const res = await db.collection('suggestions').get();
-      setSuggestions(res.data || []);
-    } catch (e) {
-      console.error('Load suggestions error:', e);
-      setSuggestions([]);
     }
   };
   const startEdit = record => {
@@ -167,12 +145,6 @@ export default function RecordsPage(props) {
             </select>
             <Filter size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
           </div>
-          {/* Suggest filter toggle */}
-          <button onClick={() => setSuggestFilter(!suggestFilter)} className={`shrink-0 px-3 py-3 rounded-2xl border text-xs font-sans transition-all flex items-center gap-1.5 ${suggestFilter ? 'bg-[#2D6A4F] text-white border-[#2D6A4F]' : 'bg-white text-gray-500 border-[#F0E6D8] hover:bg-[#FFF8F0]'}`} title={suggestFilter ? '显示所有记录' : '仅显示建议类别记录'}>
-            <Package size={14} />
-            建议类别
-            {suggestions.length > 0 && <span className="text-[10px] opacity-70">({suggestions.length})</span>}
-          </button>
         </div>
 
         {loading ? <div className="flex items-center justify-center h-40"><Loader2 size={24} className="animate-spin text-[#E8724A]" /></div> : filteredRecords.length === 0 ? <div className="bg-white rounded-2xl p-10 text-center shadow-card">

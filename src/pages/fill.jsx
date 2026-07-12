@@ -18,6 +18,7 @@ export default function FillPage(props) {
     nickname: '',
     itemName: '',
     quantity: '',
+    pieces: 1,
     price: '',
     trackingNumber: '',
     deliveryStatus: '待发货',
@@ -84,10 +85,10 @@ export default function FillPage(props) {
   }, [selectedMain, selectedSecond, selectedThird]);
   const allSelected = selectedMain && selectedSecond && selectedThird && (availableUnits.length === 0 || selectedUnit);
 
-  // Parse quantity expression
+  // Parse quantity expression (数量 = 件数 * 每件数量)
   const parseQuantity = val => {
-    if (!val.trim()) return {
-      pieces: 0,
+    if (!val || !val.trim()) return {
+      pieces: 1,
       perUnit: null,
       total: 0,
       display: ''
@@ -127,6 +128,10 @@ export default function FillPage(props) {
       alert('请填写有效数量');
       return;
     }
+    if (!form.pieces || parseInt(form.pieces) <= 0) {
+      alert('请填写有效件数');
+      return;
+    }
     if (!form.price || parseFloat(form.price) <= 0) {
       alert('请填写有效单价');
       return;
@@ -150,6 +155,7 @@ export default function FillPage(props) {
         itemName: form.itemName.trim(),
         quantity: qtyInfo.pieces,
         quantityDisplay: form.quantity.trim(),
+        pieces: parseInt(form.pieces) || 1,
         unit: selectedUnit,
         price: parseFloat(form.price),
         trackingNumber: form.trackingNumber.trim(),
@@ -165,6 +171,7 @@ export default function FillPage(props) {
         nickname: '',
         itemName: '',
         quantity: '',
+        pieces: 1,
         price: '',
         trackingNumber: '',
         deliveryStatus: '待发货',
@@ -299,7 +306,7 @@ export default function FillPage(props) {
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5 font-sans">
                   数量 <span className="text-red-400">*</span>
-                  <span className="text-gray-300 font-normal">（支持算式如 "24*500"）</span>
+                  <span className="text-gray-300 font-normal">（支持算式如 "24*500"，即每件24、共500）</span>
                   {selectedUnit && <span className="text-xs text-[#E8724A] ml-2 font-semibold">单位：{selectedUnit}</span>}
                 </label>
                 <div className="flex items-center gap-2">
@@ -310,8 +317,9 @@ export default function FillPage(props) {
                   {selectedUnit && <span className="text-base font-mono font-bold text-[#E8724A] bg-[#FFF0E6] px-3 py-3 rounded-xl">{selectedUnit}</span>}
                 </div>
                 {form.quantity.trim() && qtyInfo.total > 0 && <p className="text-xs text-gray-500 mt-1 font-sans">
-                    统计总数：<span className="font-semibold text-[#1B1B2F]">{qtyInfo.total}</span> {selectedUnit}
+                    数量统计：<span className="font-semibold text-[#1B1B2F]">{qtyInfo.total}</span> {selectedUnit}
                     {qtyInfo.perUnit && <span>（{qtyInfo.pieces}件 × {qtyInfo.perUnit}{selectedUnit}/件）</span>}
+                    <span className="ml-2 text-gray-400">件数：{form.pieces}</span>
                   </p>}
               </div>
 
@@ -321,24 +329,24 @@ export default function FillPage(props) {
                 <div className="flex items-center gap-3">
                   <button onClick={() => setForm({
                 ...form,
-                quantity: String(Math.max(1, (parseInt(form.quantity) || 1) - 1))
+                pieces: Math.max(1, (parseInt(form.pieces) || 1) - 1)
               })} className="w-10 h-10 rounded-xl border border-[#F0E6D8] flex items-center justify-center hover:bg-[#FFF0E6]"><Minus size={16} className="text-gray-600" /></button>
-                  <input type="number" value={qtyInfo.pieces} onChange={e => {
+                  <input type="number" min="1" value={form.pieces} onChange={e => {
                 const val = e.target.value;
-                const pieces = Math.max(1, parseInt(val) || 1);
                 setForm({
                   ...form,
-                  quantity: qtyInfo.perUnit ? `${pieces}*${qtyInfo.perUnit}` : String(pieces)
+                  pieces: Math.max(1, parseInt(val) || 1)
                 });
               }} className="w-20 text-center px-3 py-3 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] text-sm font-sans font-bold focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30 focus:border-[#E8724A]" />
                   <button onClick={() => {
-                const pieces = qtyInfo.pieces + 1;
+                const pieces = (parseInt(form.pieces) || 1) + 1;
                 setForm({
                   ...form,
-                  quantity: qtyInfo.perUnit ? `${pieces}*${qtyInfo.perUnit}` : String(pieces)
+                  pieces
                 });
               }} className="w-10 h-10 rounded-xl border border-[#F0E6D8] flex items-center justify-center hover:bg-[#FFF0E6]"><Plus size={16} className="text-gray-600" /></button>
                 </div>
+                <p className="text-xs text-gray-400 mt-1 font-sans">件数指包裹/箱数，与上方「数量」相互独立</p>
               </div>
 
               {/* Price */}

@@ -63,7 +63,7 @@ export default function CategoriesPage(props) {
       unitMap[uKey].add(u);
     }
     mainSet.add(m);
-    if (s) secondMap[m].add(s);
+    secondMap[m].add(s);
   });
   const [expandedMain, setExpandedMain] = useState({});
   const [expandedSecond, setExpandedSecond] = useState({});

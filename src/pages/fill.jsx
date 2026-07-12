@@ -26,7 +26,7 @@ export default function FillPage(props) {
   });
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
-  const allSelected = selectedMain && selectedSecond && selectedThird;
+  const [availableUnits, setAvailableUnits] = useState([]);
   useEffect(() => {
     loadCategories();
   }, []);
@@ -43,28 +43,48 @@ export default function FillPage(props) {
     }
   };
 
-  // Group: mainCategory → secondCategory → [{thirdCategory, unit}]
+  // Build tree: mainCategory → secondCategory → thirdCategory → [units]
   const tree = {};
+  const unitMap = {}; // main-second-third -> [units]
   categories.forEach(c => {
     const m = c.mainCategory;
     const s = c.subCategory;
+    const t = c.thirdCategory || c.spec || '';
+    const u = c.unit || '';
     if (!tree[m]) tree[m] = {};
-    if (!tree[m][s]) tree[m][s] = [];
-    const name = c.thirdCategory || c.spec;
-    if (name && !tree[m][s].find(x => x.name === name)) {
-      tree[m][s].push({
-        name,
-        unit: c.unit || '',
-        _id: c._id
-      });
+    if (!tree[m][s]) tree[m][s] = {};
+    if (t) {
+      if (!tree[m][s][t]) tree[m][s][t] = new Set();
+      if (u) tree[m][s][t].add(u);
+      const key = `${m}-${s}-${t}`;
+      if (!unitMap[key]) unitMap[key] = [];
+      if (u && !unitMap[key].includes(u)) unitMap[key].push(u);
     }
   });
   const mainCats = Object.keys(tree);
   const secondCats = selectedMain ? Object.keys(tree[selectedMain] || {}) : [];
-  const thirdItems = selectedSecond ? tree[selectedMain]?.[selectedSecond] || [] : [];
+  const thirdItems = selectedSecond ? Object.keys(tree[selectedMain]?.[selectedSecond] || {}) : [];
 
-  // Parse quantity expression: "25*500" → { pieces: 25, perUnit: 500, total: 12500 }
-  // simple "3" → { pieces: 3, perUnit: null, total: 3 }
+  // When selectedThird changes, find available units
+  useEffect(() => {
+    if (selectedMain && selectedSecond && selectedThird) {
+      const key = `${selectedMain}-${selectedSecond}-${selectedThird}`;
+      const units = unitMap[key] || [];
+      setAvailableUnits(units);
+      // If previously selected unit is not in available list, reset
+      if (selectedUnit && !units.includes(selectedUnit)) {
+        setSelectedUnit('');
+      } else if (!selectedUnit && units.length === 1) {
+        setSelectedUnit(units[0]);
+      }
+    } else {
+      setAvailableUnits([]);
+      setSelectedUnit('');
+    }
+  }, [selectedMain, selectedSecond, selectedThird]);
+  const allSelected = selectedMain && selectedSecond && selectedThird && (availableUnits.length === 0 || selectedUnit);
+
+  // Parse quantity expression
   const parseQuantity = val => {
     if (!val.trim()) return {
       pieces: 0,
@@ -91,8 +111,12 @@ export default function FillPage(props) {
   const qtyInfo = parseQuantity(form.quantity);
   const donorDisplay = form.server && form.nickname ? `${form.server} - ${form.nickname}` : '';
   const handleSubmit = async () => {
-    if (!allSelected) {
+    if (!selectedMain || !selectedSecond || !selectedThird) {
       alert('请选择完整的物资类目');
+      return;
+    }
+    if (availableUnits.length > 0 && !selectedUnit) {
+      alert('请选择单位');
       return;
     }
     if (!form.server.trim() || !form.nickname.trim()) {
@@ -112,7 +136,6 @@ export default function FillPage(props) {
       const tcb = await $w.cloud.getCloudInstance();
       const db = tcb.database();
       const userId = $w?.auth?.currentUser?.userId || '';
-      const selectedThirdItem = thirdItems.find(t => t.name === selectedThird);
       await db.collection('reports').add({
         _openid: userId,
         category: {
@@ -172,14 +195,14 @@ export default function FillPage(props) {
       <NavBar title="物资填报" showBack onBack={handleBack} $w={$w} />
 
       <div className="mx-4 mt-4 space-y-4">
-        {/* 类目选择 */}
+        {/* Category selection */}
         <div className="bg-white rounded-2xl p-5 shadow-card">
           <h3 className="font-serif font-semibold text-[#1B1B2F] mb-4 flex items-center gap-2">
             <Package size={18} className="text-[#E8724A]" /> 选择物资类目
             {allSelected && <span className="ml-auto text-xs font-sans font-normal text-[#2D6A4F] flex items-center gap-1"><CheckCircle2 size={14} /> 已选完</span>}
           </h3>
 
-          {/* 大类 */}
+          {/* Main category */}
           <div className="mb-4">
             <label className="block text-xs font-medium text-gray-500 mb-2 font-sans"><span className="w-1.5 h-1.5 rounded-full bg-[#E8724A] inline-block" /> 大类</label>
             {mainCats.length === 0 ? <p className="text-sm text-gray-400 font-sans">暂无类目，请联系管理员添加</p> : <div className="flex flex-wrap gap-2">
@@ -194,7 +217,7 @@ export default function FillPage(props) {
                 </div>}
           </div>
 
-          {/* 二级分类 */}
+          {/* Second category */}
           {selectedMain && <div className="mb-4">
               <label className="block text-xs font-medium text-gray-500 mb-2 font-sans"><span className="w-1.5 h-1.5 rounded-full bg-[#2D6A4F] inline-block" /> 二级分类</label>
               <div className="flex flex-wrap gap-2">
@@ -208,26 +231,35 @@ export default function FillPage(props) {
               </div>
             </div>}
 
-          {/* 三级分类 */}
+          {/* Third category */}
           {selectedSecond && <div className="mb-4">
               <label className="block text-xs font-medium text-gray-500 mb-2 font-sans"><span className="w-1.5 h-1.5 rounded-full bg-[#F4A261] inline-block" /> 三级分类</label>
               <div className="flex flex-wrap gap-2">
-                {thirdItems.map(item => <button key={item.name} onClick={() => {
-              setSelectedThird(item.name);
-              setSelectedUnit(item.unit || '');
-            }} className={`px-4 py-2 rounded-full text-sm font-sans transition-all ${selectedThird === item.name ? 'bg-amber-500 text-white shadow-md' : 'bg-[#FFF8E1] text-gray-700 hover:bg-[#FFECB3]'}`}>
-                    {item.name} {selectedThird === item.name && '✓'}
+                {thirdItems.map(name => <button key={name} onClick={() => {
+              setSelectedThird(name);
+              setSelectedUnit('');
+            }} className={`px-4 py-2 rounded-full text-sm font-sans transition-all ${selectedThird === name ? 'bg-amber-500 text-white shadow-md' : 'bg-[#FFF8E1] text-gray-700 hover:bg-[#FFECB3]'}`}>
+                    {name} {selectedThird === name && '✓'}
                   </button>)}
               </div>
-              {selectedUnit && <p className="mt-2 text-xs text-gray-400 font-sans">单位：<span className="font-mono font-semibold text-[#E8724A]">{selectedUnit}</span></p>}
+            </div>}
+
+          {/* Unit selection after third category */}
+          {selectedThird && availableUnits.length > 0 && <div className="mb-4">
+              <label className="block text-xs font-medium text-gray-500 mb-2 font-sans"><span className="w-1.5 h-1.5 rounded-full bg-[#E8724A] inline-block" /> 单位 <span className="text-red-400">*</span></label>
+              <div className="flex flex-wrap gap-2">
+                {availableUnits.map(u => <button key={u} onClick={() => setSelectedUnit(u)} className={`px-4 py-2 rounded-full text-sm font-sans transition-all ${selectedUnit === u ? 'bg-[#E8724A] text-white shadow-md' : 'bg-[#FFF0E6] text-gray-700 hover:bg-[#FFE8D6]'}`}>
+                    {u} {selectedUnit === u && '✓'}
+                  </button>)}
+              </div>
             </div>}
 
           {!allSelected && <div className="mt-4 pt-3 border-t border-[#F0E6D8]">
-              <p className="text-xs text-gray-400 font-sans flex items-center gap-1.5"><ChevronDown size={14} className="text-[#F4A261]" /> {!selectedMain ? '请先选择大类' : !selectedSecond ? '请继续选择二级分类' : '请继续选择三级分类'}</p>
+              <p className="text-xs text-gray-400 font-sans flex items-center gap-1.5"><ChevronDown size={14} className="text-[#F4A261]" /> {!selectedMain ? '请先选择大类' : !selectedSecond ? '请继续选择二级分类' : !selectedThird ? '请继续选择三级分类' : '请选择单位'}</p>
             </div>}
         </div>
 
-        {/* 填报详情 */}
+        {/* Fill details */}
         {allSelected && <div className="bg-white rounded-2xl p-5 shadow-card">
             <h3 className="font-serif font-semibold text-[#1B1B2F] mb-4 flex items-center gap-2">
               <span className="w-1.5 h-5 rounded-full bg-[#E8724A] inline-block" /> 填报详情
@@ -235,7 +267,7 @@ export default function FillPage(props) {
             </h3>
 
             <div className="space-y-4">
-              {/* 区服 */}
+              {/* Server */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5 font-sans">区服 <span className="text-red-400">*</span></label>
                 <input type="text" value={form.server} onChange={e => setForm({
@@ -244,7 +276,7 @@ export default function FillPage(props) {
             })} placeholder="例如：唯满侠、梦江南" className="w-full px-4 py-3 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30 focus:border-[#E8724A] transition-all" />
               </div>
 
-              {/* 昵称 */}
+              {/* Nickname */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5 font-sans">昵称 <span className="text-red-400">*</span></label>
                 <input type="text" value={form.nickname} onChange={e => setForm({
@@ -254,7 +286,7 @@ export default function FillPage(props) {
                 {donorDisplay && <p className="text-xs text-[#E8724A] mt-1 font-sans">捐赠人：{donorDisplay}</p>}
               </div>
 
-              {/* 捐赠物品名称 */}
+              {/* Item name */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5 font-sans">捐赠物品名称 <span className="text-gray-300">（选填）</span></label>
                 <input type="text" value={form.itemName} onChange={e => setForm({
@@ -263,9 +295,13 @@ export default function FillPage(props) {
             })} placeholder="如：金龙鱼大米、康师傅方便面" className="w-full px-4 py-3 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30 focus:border-[#E8724A] transition-all" />
               </div>
 
-              {/* 数量 */}
+              {/* Quantity with unit display */}
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5 font-sans">数量 <span className="text-red-400">*</span> <span className="text-gray-300 font-normal">（支持算式如 "24*500"）</span></label>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5 font-sans">
+                  数量 <span className="text-red-400">*</span>
+                  <span className="text-gray-300 font-normal">（支持算式如 "24*500"）</span>
+                  {selectedUnit && <span className="text-xs text-[#E8724A] ml-2 font-semibold">单位：{selectedUnit}</span>}
+                </label>
                 <div className="flex items-center gap-2">
                   <input type="text" value={form.quantity} onChange={e => setForm({
                 ...form,
@@ -279,7 +315,7 @@ export default function FillPage(props) {
                   </p>}
               </div>
 
-              {/* 件数 */}
+              {/* Pieces */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5 font-sans">件数 <span className="text-red-400">*</span></label>
                 <div className="flex items-center gap-3">
@@ -290,36 +326,22 @@ export default function FillPage(props) {
                   <input type="number" value={qtyInfo.pieces} onChange={e => {
                 const val = e.target.value;
                 const pieces = Math.max(1, parseInt(val) || 1);
-                if (qtyInfo.perUnit) {
-                  setForm({
-                    ...form,
-                    quantity: `${pieces}*${qtyInfo.perUnit}`
-                  });
-                } else {
-                  setForm({
-                    ...form,
-                    quantity: String(pieces)
-                  });
-                }
+                setForm({
+                  ...form,
+                  quantity: qtyInfo.perUnit ? `${pieces}*${qtyInfo.perUnit}` : String(pieces)
+                });
               }} className="w-20 text-center px-3 py-3 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] text-sm font-sans font-bold focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30 focus:border-[#E8724A]" />
                   <button onClick={() => {
                 const pieces = qtyInfo.pieces + 1;
-                if (qtyInfo.perUnit) {
-                  setForm({
-                    ...form,
-                    quantity: `${pieces}*${qtyInfo.perUnit}`
-                  });
-                } else {
-                  setForm({
-                    ...form,
-                    quantity: String(pieces)
-                  });
-                }
+                setForm({
+                  ...form,
+                  quantity: qtyInfo.perUnit ? `${pieces}*${qtyInfo.perUnit}` : String(pieces)
+                });
               }} className="w-10 h-10 rounded-xl border border-[#F0E6D8] flex items-center justify-center hover:bg-[#FFF0E6]"><Plus size={16} className="text-gray-600" /></button>
                 </div>
               </div>
 
-              {/* 单价 */}
+              {/* Price */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5 font-sans">单价（元）<span className="text-red-400">*</span></label>
                 <input type="number" step="0.01" value={form.price} onChange={e => setForm({
@@ -328,7 +350,7 @@ export default function FillPage(props) {
             })} placeholder="请输入单价" className="w-full px-4 py-3 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30 focus:border-[#E8724A] transition-all" />
               </div>
 
-              {/* 快递单号 */}
+              {/* Tracking number */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5 font-sans">快递单号</label>
                 <input type="text" value={form.trackingNumber} onChange={e => setForm({
@@ -337,7 +359,7 @@ export default function FillPage(props) {
             })} placeholder="请输入快递单号（选填）" className="w-full px-4 py-3 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30 focus:border-[#E8724A] transition-all" />
               </div>
 
-              {/* 预计到达时间 */}
+              {/* Estimated arrival */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5 font-sans">预计到达时间</label>
                 <input type="date" value={form.estimatedArrival} onChange={e => setForm({
@@ -346,7 +368,7 @@ export default function FillPage(props) {
             })} className="w-full px-4 py-3 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30 focus:border-[#E8724A] transition-all" />
               </div>
 
-              {/* 备注 */}
+              {/* Note */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5 font-sans">备注/其他</label>
                 <textarea value={form.note} onChange={e => setForm({

@@ -23,8 +23,8 @@ export default function StatisticsPage(props) {
   });
   const [filterSecond, setFilterSecond] = useState('');
   const [filterThird, setFilterThird] = useState('');
-  const [showSuggestionForm, setShowSuggestionForm] = useState(false);
-  const [newSuggestion, setNewSuggestion] = useState('');
+  const [showSuggestionPicker, setShowSuggestionPicker] = useState(false);
+  const [thirdCategoryOptions, setThirdCategoryOptions] = useState([]);
   const [expandedDay, setExpandedDay] = useState(null);
   const [dayDetails, setDayDetails] = useState([]);
 
@@ -52,6 +52,22 @@ export default function StatisticsPage(props) {
       setRecords(recordsRes.data || []);
       setCategories(categoriesRes.data || []);
       setSuggestions(suggestionRes?.data || []);
+      // 构建三级分类选项（来自类目管理）
+      const opts = [];
+      const seen = new Set();
+      (categoriesRes.data || []).forEach(c => {
+        const t = c.thirdCategory || c.spec;
+        if (t && !seen.has(t)) {
+          seen.add(t);
+          opts.push({
+            name: t,
+            mainCategory: c.mainCategory,
+            subCategory: c.subCategory,
+            unit: c.unit || ''
+          });
+        }
+      });
+      setThirdCategoryOptions(opts);
     } catch (e) {
       console.error('Load error:', e);
     } finally {
@@ -145,12 +161,14 @@ export default function StatisticsPage(props) {
     setDetailRecords(filtered);
   };
 
-  // 查看每日详情
+  // 查看每日详情 —— 按建议捐赠类别过滤
   const showDayDetailModal = dateStr => {
     const dayRecords = records.filter(r => r.createdAt && r.createdAt.startsWith(dateStr));
+    const suggestionNames = suggestions.map(s => s.content);
+    const filtered = suggestionNames.length > 0 ? dayRecords.filter(r => suggestionNames.includes(r.category?.thirdCategory || r.category?.spec)) : dayRecords;
     // 按三级分类+单位分组
     const grouped = {};
-    dayRecords.forEach(r => {
+    filtered.forEach(r => {
       const key = r.category?.thirdCategory || r.category?.spec || '其他';
       if (!grouped[key]) grouped[key] = {
         name: key,
@@ -199,42 +217,35 @@ export default function StatisticsPage(props) {
     URL.revokeObjectURL(link.href);
   };
 
-  // 建议捐赠类别
-  const handleAddSuggestion = async () => {
-    if (!newSuggestion.trim()) return;
+  // 建议捐赠类别 —— 管理员从类目管理的三级分类中选择
+  const handleToggleSuggestion = async opt => {
+    const exists = suggestions.find(s => s.content === opt.name);
     try {
       const tcb = await $w.cloud.getCloudInstance();
       const db = tcb.database();
-      await db.collection('suggestions').add({
-        content: newSuggestion.trim(),
-        createdAt: new Date().toISOString(),
-        createdBy: $w?.auth?.currentUser?.userId || ''
-      }).catch(() => {
-        throw new Error('suggestions_collection_missing');
-      });
-      setNewSuggestion('');
-      setShowSuggestionForm(false);
+      if (exists) {
+        await db.collection('suggestions').doc(exists._id).remove();
+      } else {
+        await db.collection('suggestions').add({
+          content: opt.name,
+          mainCategory: opt.mainCategory,
+          subCategory: opt.subCategory,
+          unit: opt.unit,
+          createdAt: new Date().toISOString(),
+          createdBy: $w?.auth?.currentUser?.userId || ''
+        }).catch(() => {
+          throw new Error('suggestions_collection_missing');
+        });
+      }
       const res = await db.collection('suggestions').get();
       setSuggestions(res.data || []);
     } catch (e) {
       if (e.message === 'suggestions_collection_missing') {
         alert('建议捐赠类别功能暂未开放，请联系管理员创建数据集合');
       } else {
-        console.error('Add suggestion error:', e);
-        alert('添加失败');
+        console.error('Toggle suggestion error:', e);
+        alert('操作失败');
       }
-    }
-  };
-  const handleDeleteSuggestion = async id => {
-    if (!window.confirm('确定删除这条建议？')) return;
-    try {
-      const tcb = await $w.cloud.getCloudInstance();
-      const db = tcb.database();
-      await db.collection('suggestions').doc(id).remove();
-      const res = await db.collection('suggestions').get();
-      setSuggestions(res.data || []);
-    } catch (e) {
-      console.error('Delete error:', e);
     }
   };
   const tabs = [{
@@ -402,20 +413,30 @@ export default function StatisticsPage(props) {
 
       {/* ======= 时间趋势 Tab ======= */}
       {activeTab === 'timeline' && <div className="mx-4 mt-4 space-y-4">
-          {/* 建议捐赠类别 */}
+          {/* 建议捐赠类别 —— 管理员从类目管理三级分类中选择 */}
           <div className="bg-white rounded-2xl p-5 shadow-card">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-serif font-semibold text-[#1B1B2F] flex items-center gap-2"><Package size={16} className="text-[#E8724A]" /> 建议捐赠类别</h3>
-              {isAdmin && <button onClick={() => setShowSuggestionForm(!showSuggestionForm)} className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#E8724A] text-white text-xs font-sans hover:bg-[#D4633F]"><Plus size={12} /> 添加</button>}
+              {isAdmin && <button onClick={() => setShowSuggestionPicker(!showSuggestionPicker)} className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#E8724A] text-white text-xs font-sans hover:bg-[#D4633F]"><Plus size={12} /> {showSuggestionPicker ? '收起' : '从类目选择'}</button>}
             </div>
-            {showSuggestionForm && <div className="flex gap-2 mb-3">
-                <input type="text" value={newSuggestion} onChange={e => setNewSuggestion(e.target.value)} placeholder="输入建议的捐赠类别" className="flex-1 px-3 py-2 rounded-xl border border-[#F0E6D8] text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30" onKeyDown={e => e.key === 'Enter' && handleAddSuggestion()} />
-                <button onClick={handleAddSuggestion} className="px-4 py-2 rounded-xl bg-[#2D6A4F] text-white text-xs font-sans hover:bg-[#245A43]">确认</button>
+            {showSuggestionPicker && isAdmin && <div className="mb-3 max-h-[200px] overflow-y-auto rounded-xl border border-[#F0E6D8] p-2 space-y-1">
+                {thirdCategoryOptions.length === 0 ? <p className="text-xs text-gray-400 font-sans p-2">类目管理中暂无三级分类，请先前往类目管理添加</p> : thirdCategoryOptions.map(opt => {
+            const checked = suggestions.some(s => s.content === opt.name);
+            return <button key={opt.name} onClick={() => handleToggleSuggestion(opt)} className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-sans transition-colors ${checked ? 'bg-[#FFF0E6] text-[#E8724A]' : 'hover:bg-[#FFF8F0] text-gray-700'}`}>
+                      <span>{opt.name}{opt.unit ? `（${opt.unit}）` : ''}</span>
+                      <span className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] ${checked ? 'bg-[#E8724A] border-[#E8724A] text-white' : 'border-gray-300'}`}>{checked ? '✓' : ''}</span>
+                    </button>;
+          })}
               </div>}
-            {suggestions.length === 0 ? <p className="text-xs text-gray-400 font-sans">暂无建议</p> : <div className="flex flex-wrap gap-2">
+            {suggestions.length === 0 ? <p className="text-xs text-gray-400 font-sans">暂无建议捐赠类别，管理员可从类目管理的三级分类中选择</p> : <div className="flex flex-wrap gap-2">
                   {suggestions.map(s => <div key={s._id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#FFF0E6] text-sm text-gray-700 font-sans">
-                      <span>📋 {s.content}</span>
-                      {isAdmin && <button onClick={() => handleDeleteSuggestion(s._id)} className="text-gray-400 hover:text-red-500">✕</button>}
+                      <span>📋 {s.content}{s.unit ? `（${s.unit}）` : ''}</span>
+                      {isAdmin && <button onClick={() => handleToggleSuggestion({
+              name: s.content,
+              mainCategory: s.mainCategory,
+              subCategory: s.subCategory,
+              unit: s.unit
+            })} className="text-gray-400 hover:text-red-500">✕</button>}
                     </div>)}
                 </div>}
           </div>
@@ -466,12 +487,15 @@ export default function StatisticsPage(props) {
                         <p className="text-xs text-[#2D6A4F]">¥{day.value}</p>
                       </div>
                     </button>
-                    {/* 展开详情 */}
+                    {/* 展开详情 —— 按建议捐赠类别过滤显示当日统计 */}
                     {expandedDay === day.fullDate && <div className="bg-[#FFFBF5] px-4 py-3 space-y-2">
                         {(() => {
                 const dayRecs = records.filter(r => r.createdAt && r.createdAt.startsWith(day.fullDate));
+                // 仅展示建议捐赠类别中的三级分类
+                const suggestionNames = suggestions.map(s => s.content);
+                const filtered = suggestionNames.length > 0 ? dayRecs.filter(r => suggestionNames.includes(r.category?.thirdCategory || r.category?.spec)) : dayRecs;
                 const grouped = {};
-                dayRecs.forEach(r => {
+                filtered.forEach(r => {
                   const key = r.category?.thirdCategory || r.category?.spec || '其他';
                   const unit = r.unit || '';
                   const k = `${key}|${unit}`;
@@ -484,7 +508,9 @@ export default function StatisticsPage(props) {
                   grouped[k].totalQty += getActualTotal(r);
                   grouped[k].count += 1;
                 });
-                return Object.values(grouped).map(g => <div key={g.name} className="flex items-center justify-between py-1.5 border-b border-[#F0E6D8]/30 last:border-0 text-sm">
+                const groups = Object.values(grouped);
+                if (groups.length === 0) return <p className="text-xs text-gray-400 font-sans py-1">当日暂无建议类别的捐赠记录</p>;
+                return groups.map(g => <div key={g.name} className="flex items-center justify-between py-1.5 border-b border-[#F0E6D8]/30 last:border-0 text-sm">
                               <span className="text-gray-600 font-sans">{g.name}</span>
                               <span className="text-[#1B1B2F] font-medium">{g.totalQty}{g.unit} <span className="text-xs text-gray-400">（{g.count}次）</span></span>
                             </div>);
@@ -550,6 +576,7 @@ export default function StatisticsPage(props) {
             <div className="sticky top-0 bg-white border-b border-[#F0E6D8] px-5 py-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-serif font-semibold text-[#1B1B2F]">📅 {selectedDate} 捐赠明细</h3>
+                <p className="text-[10px] text-gray-400 font-sans mt-0.5">按建议捐赠类别筛选</p>
                 <button onClick={() => setShowDayDetail(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200"><X size={16} className="text-gray-500" /></button>
               </div>
             </div>

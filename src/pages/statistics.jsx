@@ -1,7 +1,7 @@
 // @ts-ignore;
 import React, { useState, useEffect } from 'react';
 // @ts-ignore;
-import { Package, TrendingUp, Truck, Users, DollarSign, AlertCircle, Loader2, ChevronRight, Search, X, Eye, ChevronDown, ClipboardList, Hash, Download, ArrowUpDown, ArrowUp, ArrowDown, Plus, Edit3, Filter } from 'lucide-react';
+import { Package, Truck, Users, DollarSign, AlertCircle, Loader2, ChevronRight, Search, X, Eye, ChevronDown, ClipboardList, Hash, Download, ArrowUpDown, ArrowUp, ArrowDown, Plus, Edit3, Filter } from 'lucide-react';
 
 import { NavBar } from '@/components/NavBar.jsx';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -25,7 +25,6 @@ export default function StatisticsPage(props) {
   const [filterThird, setFilterThird] = useState('');
   const [showSuggestionPicker, setShowSuggestionPicker] = useState(false);
   const [thirdCategoryOptions, setThirdCategoryOptions] = useState([]);
-  const [expandedDay, setExpandedDay] = useState(null);
   const [dayDetails, setDayDetails] = useState([]);
 
   // 时间趋势 - 每日详情弹出
@@ -267,10 +266,6 @@ export default function StatisticsPage(props) {
     id: 'category',
     label: '类目汇总',
     icon: Package
-  }, {
-    id: 'timeline',
-    label: '时间趋势',
-    icon: TrendingUp
   }];
   if (loading) {
     return <div className="min-h-screen bg-[#FFF8F0]">
@@ -420,117 +415,6 @@ export default function StatisticsPage(props) {
                   </div>
                 </div>
               </div>}
-        </div>}
-
-      {/* ======= 时间趋势 Tab ======= */}
-      {activeTab === 'timeline' && <div className="mx-4 mt-4 space-y-4">
-          {/* 建议捐赠类别 —— 管理员从类目管理三级分类中选择 */}
-          <div className="bg-white rounded-2xl p-5 shadow-card">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-serif font-semibold text-[#1B1B2F] flex items-center gap-2"><Package size={16} className="text-[#E8724A]" /> 建议捐赠类别</h3>
-              {isAdmin && <button onClick={() => setShowSuggestionPicker(!showSuggestionPicker)} className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#E8724A] text-white text-xs font-sans hover:bg-[#D4633F]"><Plus size={12} /> {showSuggestionPicker ? '收起' : '从类目选择'}</button>}
-            </div>
-            {showSuggestionPicker && isAdmin && <div className="mb-3 max-h-[200px] overflow-y-auto rounded-xl border border-[#F0E6D8] p-2 space-y-1">
-                {thirdCategoryOptions.length === 0 ? <p className="text-xs text-gray-400 font-sans p-2">类目管理中暂无三级分类，请先前往类目管理添加</p> : thirdCategoryOptions.map(opt => {
-            const checked = suggestions.some(s => (s.categories || []).some(c => c.thirdCategory === opt.name && c.subCategory === opt.subCategory && c.mainCategory === opt.mainCategory));
-            return <button key={opt.name} onClick={() => handleToggleSuggestion(opt)} className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-sans transition-colors ${checked ? 'bg-[#FFF0E6] text-[#E8724A]' : 'hover:bg-[#FFF8F0] text-gray-700'}`}>
-                      <span>{opt.name}{opt.unit ? `（${opt.unit}）` : ''}</span>
-                      <span className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] ${checked ? 'bg-[#E8724A] border-[#E8724A] text-white' : 'border-gray-300'}`}>{checked ? '✓' : ''}</span>
-                    </button>;
-          })}
-              </div>}
-            {suggestions.length === 0 ? <p className="text-xs text-gray-400 font-sans">暂无建议捐赠类别，管理员可从类目管理的三级分类中选择</p> : <div className="flex flex-wrap gap-2">
-                  {suggestions.flatMap(s => (s.categories || []).map((c, i) => <div key={`${s._id}-${i}`} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#FFF0E6] text-sm text-gray-700 font-sans">
-                      <span>📋 {c.thirdCategory}{c.unit ? `（${c.unit}）` : ''}</span>
-                      {isAdmin && <button onClick={() => handleToggleSuggestion({
-              name: c.thirdCategory,
-              mainCategory: c.mainCategory,
-              subCategory: c.subCategory,
-              unit: c.unit
-            })} className="text-gray-400 hover:text-red-500">✕</button>}
-                    </div>))}
-                </div>}
-          </div>
-
-          {/* 趋势图 */}
-          <div className="bg-white rounded-2xl p-5 shadow-card">
-            <h3 className="font-serif font-semibold text-[#1B1B2F] mb-4 flex items-center gap-2"><TrendingUp size={16} className="text-[#E8724A]" /> 捐赠数量趋势</h3>
-            {timelineData.length > 0 ? <ResponsiveContainer width="100%" height={240}>
-                <LineChart data={timelineData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F0E6D8" />
-                  <XAxis dataKey="date" tick={{
-              fontSize: 11,
-              fontFamily: 'Noto Sans SC'
-            }} stroke="#9CA3AF" />
-                  <YAxis tick={{
-              fontSize: 11
-            }} stroke="#9CA3AF" />
-                  <Tooltip contentStyle={{
-              borderRadius: '12px',
-              border: 'none',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-              fontFamily: 'Noto Sans SC'
-            }} />
-                  <Line type="monotone" dataKey="quantity" stroke="#E8724A" strokeWidth={2} dot={{
-              fill: '#E8724A',
-              strokeWidth: 2
-            }} activeDot={{
-              r: 6,
-              fill: '#E8724A'
-            }} name="数量" />
-                </LineChart>
-              </ResponsiveContainer> : <p className="text-center text-gray-400 py-8 text-sm">暂无数据</p>}
-          </div>
-
-          {/* 每日捐赠明细 - 可展开 */}
-          <div className="bg-white rounded-2xl p-5 shadow-card">
-            <h3 className="font-serif font-semibold text-[#1B1B2F] mb-3 flex items-center gap-2"><span className="w-1.5 h-5 rounded-full bg-[#2D6A4F]" /> 每日捐赠明细</h3>
-            {timelineData.length > 0 ? <div className="max-h-[400px] overflow-y-auto">
-                {[...timelineData].reverse().map(day => <div key={day.fullDate}>
-                    <button onClick={() => setExpandedDay(expandedDay === day.fullDate ? null : day.fullDate)} className="w-full flex items-center justify-between py-2.5 border-b border-[#F0E6D8] hover:bg-[#FFF8F0] transition-colors">
-                      <div className="flex items-center gap-3">
-                        <ChevronRight size={14} className={`text-gray-400 transition-transform ${expandedDay === day.fullDate ? 'rotate-90' : ''}`} />
-                        <span className="text-sm font-medium text-gray-700 font-sans">{day.date}</span>
-                        <span className="text-xs text-gray-400 font-sans">{day.count}次登记</span>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-semibold text-[#1B1B2F]">{day.quantity}</p>
-                        <p className="text-xs text-[#2D6A4F]">¥{day.value}</p>
-                      </div>
-                    </button>
-                    {/* 展开详情 —— 按建议捐赠类别过滤显示当日统计 */}
-                    {expandedDay === day.fullDate && <div className="bg-[#FFFBF5] px-4 py-3 space-y-2">
-                        {(() => {
-                const dayRecs = records.filter(r => r.createdAt && r.createdAt.startsWith(day.fullDate));
-                // 仅展示建议捐赠类别中的三级分类
-                const suggestionNames = suggestions.flatMap(s => (s.categories || []).map(c => c.thirdCategory)).filter(Boolean);
-                const filtered = suggestionNames.length > 0 ? dayRecs.filter(r => suggestionNames.includes(r.category?.thirdCategory || r.category?.spec)) : dayRecs;
-                const grouped = {};
-                filtered.forEach(r => {
-                  const key = r.category?.thirdCategory || r.category?.spec || '其他';
-                  const unit = r.unit || '';
-                  const k = `${key}|${unit}`;
-                  if (!grouped[k]) grouped[k] = {
-                    name: key,
-                    unit,
-                    totalQty: 0,
-                    count: 0
-                  };
-                  grouped[k].totalQty += getActualTotal(r);
-                  grouped[k].count += 1;
-                });
-                const groups = Object.values(grouped);
-                if (groups.length === 0) return <p className="text-xs text-gray-400 font-sans py-1">当日暂无建议类别的捐赠记录</p>;
-                return groups.map(g => <div key={g.name} className="flex items-center justify-between py-1.5 border-b border-[#F0E6D8]/30 last:border-0 text-sm">
-                              <span className="text-gray-600 font-sans">{g.name}</span>
-                              <span className="text-[#1B1B2F] font-medium">{g.totalQty}{g.unit} <span className="text-xs text-gray-400">（{g.count}次）</span></span>
-                            </div>);
-              })()}
-                        <button onClick={() => showDayDetailModal(day.fullDate)} className="text-xs text-[#E8724A] hover:underline font-sans flex items-center gap-1 mt-2"><Eye size={12} /> 查看完整详情</button>
-                      </div>}
-                  </div>)}
-              </div> : <p className="text-center text-gray-400 py-4 text-sm">暂无数据</p>}
-          </div>
         </div>}
 
       {/* ======= 小类详情弹窗 ======= */}

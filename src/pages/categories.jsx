@@ -1,7 +1,7 @@
 // @ts-ignore;
 import React, { useState, useEffect } from 'react';
 // @ts-ignore;
-import { Plus, Trash2, Tags, FolderOpen, ChevronRight, ChevronDown, Loader2, Shield } from 'lucide-react';
+import { Plus, Trash2, Tags, FolderOpen, ChevronRight, ChevronDown, Loader2, Shield, Edit3, Check, X } from 'lucide-react';
 
 import { NavBar } from '@/components/NavBar.jsx';
 export default function CategoriesPage(props) {
@@ -164,6 +164,30 @@ export default function CategoriesPage(props) {
       alert('删除失败');
     }
   };
+  // Deletes all documents matching a level (used for bulk deletion)
+  const handleBulkDelete = async (level, name, parentMain, parentSecond, parentThird) => {
+    const label = level === 'main' ? `大类「${name}」及所有下级分类` : level === 'second' ? `二级分类「${name}」及所有下级分类` : level === 'third' ? `三级分类「${name}」及所属单位` : `单位「${name}」`;
+    if (!window.confirm(`确定删除${label}？`)) return;
+    try {
+      const tcb = await $w.cloud.getCloudInstance();
+      const db = tcb.database();
+      let docs = [];
+      if (level === 'main') {
+        docs = categories.filter(c => c.mainCategory === name);
+      } else if (level === 'second') {
+        docs = categories.filter(c => c.mainCategory === parentMain && c.subCategory === name);
+      } else if (level === 'third') {
+        docs = categories.filter(c => c.mainCategory === parentMain && c.subCategory === parentSecond && (c.thirdCategory === name || c.spec === name));
+      }
+      for (const doc of docs) {
+        await db.collection('categories').doc(doc._id).remove();
+      }
+      loadCategories();
+    } catch (e) {
+      console.error('Bulk delete error:', e);
+      alert('删除失败');
+    }
+  };
   const handleDeleteUnit = async (mainCat, secondCat, thirdCat, unitToDelete) => {
     if (!window.confirm(`确定删除单位「${unitToDelete}」？`)) return;
     try {
@@ -178,6 +202,82 @@ export default function CategoriesPage(props) {
     } catch (e) {
       console.error('Delete unit error:', e);
       alert('删除失败');
+    }
+  };
+  // Edit state & functions
+  const [editState, setEditState] = useState(null); // { level: 'main'|'second'|'third'|'unit', key, oldValue, parentMain, parentSecond, parentThird }
+  const [editValue, setEditValue] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
+  const startEdit = (level, oldValue, parentMain, parentSecond, parentThird) => {
+    setEditState({
+      level,
+      oldValue,
+      parentMain,
+      parentSecond,
+      parentThird
+    });
+    setEditValue(oldValue);
+  };
+  const cancelEdit = () => {
+    setEditState(null);
+    setEditValue('');
+  };
+  const handleEditSave = async () => {
+    if (!editValue.trim() || editValue.trim() === editState.oldValue) {
+      cancelEdit();
+      return;
+    }
+    const newVal = editValue.trim();
+    setEditLoading(true);
+    try {
+      const tcb = await $w.cloud.getCloudInstance();
+      const db = tcb.database();
+      const {
+        level,
+        oldValue,
+        parentMain,
+        parentSecond,
+        parentThird
+      } = editState;
+      if (level === 'main') {
+        // Update all docs with this mainCategory
+        const docs = categories.filter(c => c.mainCategory === oldValue);
+        for (const doc of docs) {
+          await db.collection('categories').doc(doc._id).update({
+            mainCategory: newVal
+          });
+        }
+      } else if (level === 'second') {
+        const docs = categories.filter(c => c.mainCategory === parentMain && c.subCategory === oldValue);
+        for (const doc of docs) {
+          await db.collection('categories').doc(doc._id).update({
+            subCategory: newVal
+          });
+        }
+      } else if (level === 'third') {
+        const docs = categories.filter(c => c.mainCategory === parentMain && c.subCategory === parentSecond && (c.thirdCategory === oldValue || c.spec === oldValue));
+        for (const doc of docs) {
+          await db.collection('categories').doc(doc._id).update({
+            thirdCategory: newVal,
+            spec: newVal
+          });
+        }
+      } else if (level === 'unit') {
+        // Unit is stored as separate docs with the unit field
+        const docs = categories.filter(c => c.mainCategory === parentMain && c.subCategory === parentSecond && (c.thirdCategory === parentThird || c.spec === parentThird) && c.unit === oldValue);
+        for (const doc of docs) {
+          await db.collection('categories').doc(doc._id).update({
+            unit: newVal
+          });
+        }
+      }
+      cancelEdit();
+      loadCategories();
+    } catch (e) {
+      console.error('Edit error:', e);
+      alert('修改失败');
+    } finally {
+      setEditLoading(false);
     }
   };
   const handleBack = () => {
@@ -218,8 +318,32 @@ export default function CategoriesPage(props) {
                     <button onClick={() => toggleMain(mainCat)} className="w-full flex items-center gap-3 px-4 py-3.5 bg-gradient-to-r from-[#E8724A] to-[#F4A261] text-white hover:opacity-95 transition-opacity">
                       {isMainOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                       <FolderOpen size={16} />
-                      <span className="font-serif font-semibold">{mainCat}</span>
-                      <span className="ml-auto text-xs text-white/70 font-sans">{secondCats.length}个二级分类</span>
+                      <span className="font-serif font-semibold">{editState?.level === 'main' && editState?.oldValue === mainCat ? <input value={editValue} onChange={e => setEditValue(e.target.value)} className="px-2 py-0.5 rounded-md bg-white/20 text-white text-sm font-mono w-28" autoFocus onKeyDown={e => {
+                  if (e.key === 'Enter') handleEditSave();
+                  if (e.key === 'Escape') cancelEdit();
+                }} onClick={e => e.stopPropagation()} /> : mainCat}</span>
+                      {isAdmin && editState?.level === 'main' && editState?.oldValue === mainCat ? <span className="flex items-center gap-1 ml-2">
+                          <button onClick={e => {
+                  e.stopPropagation();
+                  handleEditSave();
+                }} disabled={editLoading} className="w-6 h-6 flex items-center justify-center rounded-md bg-white/20 hover:bg-white/30">{editLoading ? <Loader2 size={10} className="animate-spin" /> : <Check size={12} />}</button>
+                          <button onClick={e => {
+                  e.stopPropagation();
+                  cancelEdit();
+                }} className="w-6 h-6 flex items-center justify-center rounded-md bg-white/20 hover:bg-white/30"><X size={12} /></button>
+                        </span> : <>
+                          <span className="ml-auto text-xs text-white/70 font-sans">{secondCats.length}个二级分类</span>
+                          {isAdmin && <span className="ml-2 flex items-center gap-1">
+                              <button onClick={e => {
+                    e.stopPropagation();
+                    startEdit('main', mainCat);
+                  }} className="w-6 h-6 flex items-center justify-center rounded-md bg-white/20 hover:bg-white/30 text-white/80 hover:text-white"><Edit3 size={11} /></button>
+                              <button onClick={e => {
+                    e.stopPropagation();
+                    handleBulkDelete('main', mainCat);
+                  }} className="w-6 h-6 flex items-center justify-center rounded-md bg-white/20 hover:bg-white/30 text-white/80 hover:text-red-300"><Trash2 size={11} /></button>
+                            </span>}
+                        </>}
                     </button>
                     {isMainOpen && <div className="divide-y divide-[#F0E6D8]">
                         {/* Inline add for second category */}
@@ -251,8 +375,32 @@ export default function CategoriesPage(props) {
                 return <div key={secKey}>
                               <button onClick={() => toggleSecond(secKey)} className="w-full flex items-center gap-2 pl-8 pr-4 py-3 hover:bg-[#FFF8F0] transition-colors text-left">
                                 {isSecOpen ? <ChevronDown size={14} className="text-[#2D6A4F]" /> : <ChevronRight size={14} className="text-[#2D6A4F]" />}
-                                <span className="text-sm font-medium text-[#1B1B2F] font-sans">{secCat}</span>
-                                <span className="text-xs text-gray-400 font-sans ml-auto">{thirdItems.length}个三级分类</span>
+                                {editState?.level === 'second' && editState?.parentMain === mainCat && editState?.oldValue === secCat ? <input value={editValue} onChange={e => setEditValue(e.target.value)} className="px-2 py-0.5 rounded-md border border-[#2D6A4F]/30 bg-white text-sm font-sans w-28" autoFocus onKeyDown={e => {
+                      if (e.key === 'Enter') handleEditSave();
+                      if (e.key === 'Escape') cancelEdit();
+                    }} onClick={e => e.stopPropagation()} /> : <span className="text-sm font-medium text-[#1B1B2F] font-sans">{secCat}</span>}
+                                {editState?.level === 'second' && editState?.parentMain === mainCat && editState?.oldValue === secCat ? <span className="flex items-center gap-1 ml-auto">
+                                    <button onClick={e => {
+                        e.stopPropagation();
+                        handleEditSave();
+                      }} disabled={editLoading} className="w-6 h-6 flex items-center justify-center rounded-md bg-green-50 hover:bg-green-100">{editLoading ? <Loader2 size={10} className="animate-spin text-green-600" /> : <Check size={12} className="text-green-600" />}</button>
+                                    <button onClick={e => {
+                        e.stopPropagation();
+                        cancelEdit();
+                      }} className="w-6 h-6 flex items-center justify-center rounded-md bg-gray-50 hover:bg-gray-100"><X size={12} className="text-gray-500" /></button>
+                                  </span> : <>
+                                    <span className="text-xs text-gray-400 font-sans ml-auto">{thirdItems.length}个三级分类</span>
+                                    {isAdmin && <span className="ml-2 flex items-center gap-1">
+                                        <button onClick={e => {
+                          e.stopPropagation();
+                          startEdit('second', secCat, mainCat);
+                        }} className="w-6 h-6 flex items-center justify-center rounded-md bg-gray-50 hover:bg-gray-100"><Edit3 size={11} className="text-gray-500" /></button>
+                                        <button onClick={e => {
+                          e.stopPropagation();
+                          handleBulkDelete('second', secCat, mainCat);
+                        }} className="w-6 h-6 flex items-center justify-center rounded-md bg-red-50 hover:bg-red-100"><Trash2 size={11} className="text-red-400" /></button>
+                                      </span>}
+                                  </>}
                               </button>
                               {isSecOpen && <div className="bg-[#FFFBF5]">
                                   {/* Inline add for third category */}
@@ -280,8 +428,32 @@ export default function CategoriesPage(props) {
                                       <button onClick={() => toggleThird(thirdKey)} className="w-full flex items-center gap-2 pl-14 pr-4 py-2.5 hover:bg-[#FFF8F0] transition-colors text-left border-t border-[#F0E6D8]/50">
                                         {isThirdOpen ? <ChevronDown size={12} className="text-[#F4A261]" /> : <ChevronRight size={12} className="text-[#F4A261]" />}
                                         <Tags size={12} className="text-[#F4A261]" />
-                                        <span className="text-sm text-gray-700 font-sans">{thirdName}</span>
-                                        <span className="text-xs text-gray-400 font-sans ml-auto">{units.length}个单位</span>
+                                        {editState?.level === 'third' && editState?.parentMain === mainCat && editState?.parentSecond === secCat && editState?.oldValue === thirdName ? <input value={editValue} onChange={e => setEditValue(e.target.value)} className="px-2 py-0.5 rounded-md border border-amber-500/30 bg-white text-sm font-sans w-28" autoFocus onKeyDown={e => {
+                            if (e.key === 'Enter') handleEditSave();
+                            if (e.key === 'Escape') cancelEdit();
+                          }} onClick={e => e.stopPropagation()} /> : <span className="text-sm text-gray-700 font-sans">{thirdName}</span>}
+                                        {editState?.level === 'third' && editState?.parentMain === mainCat && editState?.parentSecond === secCat && editState?.oldValue === thirdName ? <span className="flex items-center gap-1 ml-auto">
+                                            <button onClick={e => {
+                              e.stopPropagation();
+                              handleEditSave();
+                            }} disabled={editLoading} className="w-6 h-6 flex items-center justify-center rounded-md bg-green-50 hover:bg-green-100">{editLoading ? <Loader2 size={10} className="animate-spin text-green-600" /> : <Check size={12} className="text-green-600" />}</button>
+                                            <button onClick={e => {
+                              e.stopPropagation();
+                              cancelEdit();
+                            }} className="w-6 h-6 flex items-center justify-center rounded-md bg-gray-50 hover:bg-gray-100"><X size={12} className="text-gray-500" /></button>
+                                          </span> : <>
+                                            <span className="text-xs text-gray-400 font-sans ml-auto">{units.length}个单位</span>
+                                            {isAdmin && <span className="ml-2 flex items-center gap-1">
+                                                <button onClick={e => {
+                                e.stopPropagation();
+                                startEdit('third', thirdName, mainCat, secCat);
+                              }} className="w-6 h-6 flex items-center justify-center rounded-md bg-gray-50 hover:bg-gray-100"><Edit3 size={11} className="text-gray-500" /></button>
+                                                <button onClick={e => {
+                                e.stopPropagation();
+                                handleBulkDelete('third', thirdName, mainCat, secCat);
+                              }} className="w-6 h-6 flex items-center justify-center rounded-md bg-red-50 hover:bg-red-100"><Trash2 size={11} className="text-red-400" /></button>
+                                              </span>}
+                                          </>}
                                       </button>
                                       {isThirdOpen && <div className="bg-[#FFFAF5] pb-2">
                                           {/* Inline add for unit */}
@@ -303,12 +475,31 @@ export default function CategoriesPage(props) {
                                                 </button>}
                                             </div> : <div className="pl-20 pr-4 py-1.5 space-y-1.5">
                                               {units.map(u => <div key={u} className="flex items-center justify-between py-1">
-                                                  <span className="text-xs font-mono text-gray-600 bg-[#FFF0E6] px-2.5 py-0.5 rounded-full">{u}</span>
-                                                  {isAdmin && <button onClick={() => handleDeleteUnit(mainCat, secCat, thirdName, u)} className="w-6 h-6 rounded-md bg-red-50 flex items-center justify-center hover:bg-red-100">
-                                                      <Trash2 size={10} className="text-red-400" />
-                                                    </button>}
+                                                  {editState?.level === 'unit' && editState?.parentThird === thirdName && editState?.parentSecond === secCat && editState?.parentMain === mainCat && editState?.oldValue === u ? <div className="flex items-center gap-1.5">
+                                                      <input value={editValue} onChange={e => setEditValue(e.target.value)} className="w-20 px-2 py-0.5 rounded-md border border-[#E8724A]/30 bg-white text-xs font-mono" autoFocus onKeyDown={e => {
+                                  if (e.key === 'Enter') handleEditSave();
+                                  if (e.key === 'Escape') cancelEdit();
+                                }} onClick={e => e.stopPropagation()} />
+                                                      <button onClick={e => {
+                                  e.stopPropagation();
+                                  handleEditSave();
+                                }} disabled={editLoading} className="w-5 h-5 flex items-center justify-center rounded bg-green-50">{editLoading ? <Loader2 size={8} className="animate-spin text-green-600" /> : <Check size={10} className="text-green-600" />}</button>
+                                                      <button onClick={e => {
+                                  e.stopPropagation();
+                                  cancelEdit();
+                                }} className="w-5 h-5 flex items-center justify-center rounded bg-gray-50"><X size={10} className="text-gray-500" /></button>
+                                                    </div> : <>
+                                                      <span className="text-xs font-mono text-gray-600 bg-[#FFF0E6] px-2.5 py-0.5 rounded-full">{u}</span>
+                                                      {isAdmin && <span className="flex items-center gap-1">
+                                                          <button onClick={e => {
+                                    e.stopPropagation();
+                                    startEdit('unit', u, mainCat, secCat, thirdName);
+                                  }} className="w-5 h-5 flex items-center justify-center rounded bg-blue-50 hover:bg-blue-100"><Edit3 size={9} className="text-blue-500" /></button>
+                                                          <button onClick={() => handleDeleteUnit(mainCat, secCat, thirdName, u)} className="w-5 h-5 rounded-md bg-red-50 flex items-center justify-center hover:bg-red-100"><Trash2 size={9} className="text-red-400" /></button>
+                                                        </span>}
+                                                    </>}
                                                 </div>)}
-                                              {isAdmin && <button onClick={() => startInlineAdd('unit', mainCat, secCat, thirdName)} className="flex items-center gap-1 text-xs text-[#E8724A] font-sans hover:underline py-1">
+                                              {isAdmin && editState?.level !== 'unit' && <button onClick={() => startInlineAdd('unit', mainCat, secCat, thirdName)} className="flex items-center gap-1 text-xs text-[#E8724A] font-sans hover:underline py-1">
                                                   <Plus size={10} /> 添加单位
                                                 </button>}
                                             </div>}

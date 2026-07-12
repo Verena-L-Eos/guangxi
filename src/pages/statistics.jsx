@@ -97,78 +97,50 @@ export default function StatisticsPage(props) {
     count: data.count
   })).sort((a, b) => a.date.localeCompare(b.date));
 
-  // 类目汇总 - 所有大类列表
+  // 类目汇总 — 扁平化：每行一个三级分类
   const mainCategories = [...new Set(categories.map(c => c.mainCategory).filter(Boolean))];
-
-  // 查看三级分类详情
-  const showThirdDetail = (mainCat, subCat, thirdCat) => {
-    const filtered = records.filter(r => r.category?.mainCategory === mainCat && r.category?.subCategory === subCat && (r.category?.thirdCategory === thirdCat || r.category?.spec === thirdCat)).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const getFlatCategoryStats = (mainFilter = '', secondFilter = '', thirdFilter = '') => {
+    const grouped = {};
+    records.forEach(r => {
+      const mainCat = r.category?.mainCategory;
+      const subCat = r.category?.subCategory;
+      const thirdCat = r.category?.thirdCategory || r.category?.spec;
+      const unit = r.unit || '';
+      if (!mainCat || !subCat || !thirdCat) return;
+      if (mainFilter && mainCat !== mainFilter) return;
+      if (secondFilter && subCat !== secondFilter) return;
+      if (thirdFilter && thirdCat !== thirdFilter) return;
+      const key = `${mainCat}||${subCat}||${thirdCat}||${unit}`;
+      if (!grouped[key]) grouped[key] = {
+        mainCategory: mainCat,
+        subCategory: subCat,
+        thirdCategory: thirdCat,
+        unit,
+        totalQty: 0,
+        records: []
+      };
+      grouped[key].totalQty += getActualTotal(r);
+      grouped[key].records.push(r);
+    });
+    return Object.values(grouped).sort((a, b) => sortOrder.dir === 'desc' ? b.totalQty - a.totalQty : a.totalQty - b.totalQty);
+  };
+  const flatStats = getFlatCategoryStats(expandedMain, filterSecond, filterThird);
+  const allSecond = expandedMain ? [...new Set(categories.filter(c => c.mainCategory === expandedMain).map(c => c.subCategory).filter(Boolean))] : [];
+  const allThirdSet = {};
+  if (expandedMain && filterSecond) {
+    categories.filter(c => c.mainCategory === expandedMain && c.subCategory === filterSecond).forEach(c => {
+      const name = c.thirdCategory || c.spec;
+      if (name) allThirdSet[name] = true;
+    });
+  }
+  const allThird = Object.keys(allThirdSet);
+  const showSubDetail = (mainCat, subCat) => {
+    const filtered = records.filter(r => r.category?.mainCategory === mainCat && r.category?.subCategory === subCat).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     setDetailSub({
       mainCategory: mainCat,
-      subCategory: subCat,
-      thirdCategory: thirdCat
+      subCategory: subCat
     });
     setDetailRecords(filtered);
-  };
-
-  // 获取所有三级分类平铺数据
-  const getAllThirdCategoryStats = () => {
-    const rows = [];
-    const mains = expandedMain ? [expandedMain] : mainCategories;
-    mains.forEach(mainCat => {
-      const subs = [...new Set(categories.filter(c => c.mainCategory === mainCat).map(c => c.subCategory).filter(Boolean))];
-      subs.filter(s => !filterSecond || s === filterSecond).forEach(sub => {
-        const thirdCatSet = {};
-        categories.filter(c => c.mainCategory === mainCat && c.subCategory === sub).forEach(c => {
-          const name = c.thirdCategory || c.spec;
-          const unit = c.unit || '';
-          if (!thirdCatSet[name]) thirdCatSet[name] = {
-            name,
-            unit,
-            records: []
-          };
-        });
-        records.filter(r => r.category?.mainCategory === mainCat && r.category?.subCategory === sub).forEach(r => {
-          const name = r.category?.thirdCategory || r.category?.spec;
-          if (thirdCatSet[name]) thirdCatSet[name].records.push(r);
-        });
-        Object.values(thirdCatSet).filter(t => !filterThird || t.name === filterThird).forEach(t => {
-          rows.push({
-            mainCategory: mainCat,
-            subCategory: sub,
-            thirdCategory: t.name,
-            unit: t.unit,
-            totalQty: t.records.reduce((s, r) => s + getActualTotal(r), 0),
-            recordCount: t.records.length,
-            records: t.records
-          });
-        });
-      });
-    });
-    rows.sort((a, b) => sortOrder.dir === 'desc' ? b.totalQty - a.totalQty : a.totalQty - b.totalQty);
-    return rows;
-  };
-
-  // 导出类目汇总表（当前展示的数据）
-  const exportAllCategoryTable = () => {
-    const thirdRows = getAllThirdCategoryStats();
-    const headers = ['大类', '二级分类', '三级分类', '统计总数', '单位'];
-    const csvRows = thirdRows.map(r => [r.mainCategory, r.subCategory, r.thirdCategory, r.totalQty, r.unit]);
-    const csv = [headers.join(','), ...csvRows.map(r => r.map(v => `"${v}"`).join(','))].join('\n');
-    const blob = new Blob(['\uFEFF' + csv], {
-      type: 'text/csv;charset=utf-8;'
-    });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `类目汇总_${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(link.href);
-  };
-
-  // 导出指定三级分类的捐赠明细
-  const exportByThirdCategory = (mainCat, subCat, thirdCat) => {
-    const filtered = records.filter(r => r.category?.mainCategory === mainCat && r.category?.subCategory === subCat && (r.category?.thirdCategory === thirdCat || r.category?.spec === thirdCat));
-    exportCSV(filtered, `${thirdCat}_${new Date().toISOString().slice(0, 10)}`);
   };
 
   // 查看每日详情
@@ -204,9 +176,25 @@ export default function StatisticsPage(props) {
     URL.revokeObjectURL(link.href);
   };
   const exportAll = () => exportCSV(records, `全部捐赠_${new Date().toISOString().slice(0, 10)}`);
-  const exportByCategory = (mainCat, secondCat) => {
-    const filtered = records.filter(r => r.category?.mainCategory === mainCat && (!secondCat || r.category?.subCategory === secondCat));
-    exportCSV(filtered, `${mainCat}${secondCat ? '_' + secondCat : ''}_${new Date().toISOString().slice(0, 10)}`);
+  const exportByCategory = (mainCat, secondCat, thirdCat) => {
+    const filtered = records.filter(r => r.category?.mainCategory === mainCat && (!secondCat || r.category?.subCategory === secondCat) && (!thirdCat || (r.category?.thirdCategory || r.category?.spec) === thirdCat));
+    const suffix = thirdCat ? `_${thirdCat}` : secondCat ? `_${secondCat}` : `_${mainCat}`;
+    exportCSV(filtered, `捐赠导出${suffix}_${new Date().toISOString().slice(0, 10)}`);
+  };
+  // 导出当前分类统计表（导出的是统计表展示的数据，即 flatStats）
+  const exportFlatStatsCSV = () => {
+    if (flatStats.length === 0) return;
+    const headers = ['大类', '二级分类', '三级分类', '统计总数', '单位'];
+    const rows = flatStats.map(r => [r.mainCategory, r.subCategory, r.thirdCategory, r.totalQty, r.unit]);
+    const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v}"`).join(','))].join('\n');
+    const blob = new Blob(['\uFEFF' + csv], {
+      type: 'text/csv;charset=utf-8;'
+    });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `类目统计_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
   };
 
   // 建议捐赠类别
@@ -359,47 +347,53 @@ export default function StatisticsPage(props) {
             </div>}
 
           {mainCategories.length === 0 ? <div className="bg-white rounded-2xl p-8 text-center shadow-card"><Package size={40} className="mx-auto text-gray-300 mb-3" /><p className="text-gray-400 text-sm font-sans">暂无类目数据</p></div> : <div className="bg-white rounded-2xl shadow-card overflow-hidden">
-                  <div className="flex items-center justify-between p-5 bg-gradient-to-r from-[#FFE8D6] to-[#FFD6B0]">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-white/80 flex items-center justify-center"><Package size={18} className="text-[#E8724A]" /></div>
-                      <div>
-                        <p className="font-serif font-semibold text-[#1B1B2F]">类目汇总表</p>
-                        <p className="text-xs text-gray-500 font-sans">共 {getAllThirdCategoryStats().length} 个三级分类</p>
-                      </div>
+                <div className="flex items-center justify-between p-5 bg-gradient-to-r from-[#FFE8D6] to-[#FFD6B0]">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-white/80 flex items-center justify-center"><Package size={18} className="text-[#E8724A]" /></div>
+                    <div>
+                      <p className="font-serif font-semibold text-[#1B1B2F]">类目统计表</p>
+                      <p className="text-xs text-gray-500 font-sans">{flatStats.length} 条记录</p>
                     </div>
-                    {isAdmin && <button onClick={exportAllCategoryTable} className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white text-xs text-gray-600 font-sans hover:bg-gray-50 shadow-sm"><Download size={12} /> 导出</button>}
                   </div>
-                  <div className="px-5 pt-4 pb-4">
-                    <div className="overflow-x-auto">
-                      <div className="min-w-[700px]">
-                        <div className="flex items-center text-xs text-gray-400 font-sans py-2 border-b border-[#F0E6D8]">
-                          <span className="w-[100px]">大类</span>
-                          <span className="w-[120px]">二级分类</span>
-                          <span className="w-[140px]">三级分类</span>
-                          <span className="w-[100px] text-center flex items-center justify-center gap-1 cursor-pointer" onClick={() => setSortOrder(p => ({
+                  {isAdmin && <button onClick={exportFlatStatsCSV} className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white text-xs text-gray-600 font-sans hover:bg-gray-50 shadow-sm"><Download size={12} /> 导出统计表</button>}
+                </div>
+                <div className="px-5 pt-4 pb-4">
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[800px]">
+                      {/* 表头：大类 | 二级分类 | 三级分类 | 统计总数 | 单位 | 操作(查看/导出) */}
+                      <div className="flex items-center text-xs text-gray-400 font-sans py-2 border-b border-[#F0E6D8]">
+                        <span className="w-[130px]">大类</span>
+                        <span className="w-[130px]">二级分类</span>
+                        <span className="w-[160px]">三级分类</span>
+                        <span className="w-[110px] text-center flex items-center justify-center gap-1 cursor-pointer" onClick={() => setSortOrder(p => ({
                   key: 'totalQty',
                   dir: p.dir === 'desc' ? 'asc' : 'desc'
                 }))}>
-                            统计总数 {sortOrder.dir === 'desc' ? <ArrowDown size={12} /> : <ArrowUp size={12} />}
-                          </span>
-                          <span className="w-[70px] text-center">单位</span>
-                          <span className="w-[90px] text-center">操作</span>
-                        </div>
-                        {getAllThirdCategoryStats().map((row, idx) => <div key={`${row.mainCategory}|${row.subCategory}|${row.thirdCategory}`} className="flex items-center py-2.5 border-b border-[#F0E6D8]/50 hover:bg-[#FFF8F0] transition-colors">
-                            <span className="w-[100px] text-sm text-[#1B1B2F] font-medium">{row.mainCategory}</span>
-                            <span className="w-[120px] text-sm text-gray-600">{row.subCategory}</span>
-                            <span className="w-[140px] text-sm text-gray-500">{row.thirdCategory}</span>
-                            <span className="w-[100px] text-center text-sm font-semibold text-[#E8724A]">{row.totalQty}</span>
-                            <span className="w-[70px] text-center text-xs text-gray-400">{row.unit || '-'}</span>
-                            <span className="w-[90px] text-center flex items-center justify-center gap-2">
-                              <button onClick={() => showThirdDetail(row.mainCategory, row.subCategory, row.thirdCategory)} className="text-[#2D6A4F] text-xs hover:underline flex items-center gap-0.5"><Eye size={11} /> 查看</button>
-                              {isAdmin && <button onClick={() => exportByThirdCategory(row.mainCategory, row.subCategory, row.thirdCategory)} className="text-[#E8724A] text-xs hover:underline">导出</button>}
-                            </span>
-                          </div>)}
+                          统计总数 {sortOrder.dir === 'desc' ? <ArrowDown size={12} /> : <ArrowUp size={12} />}
+                        </span>
+                        <span className="w-[70px] text-center">单位</span>
+                        <span className="w-[100px] text-center">查看</span>
+                        {isAdmin && <span className="w-[100px] text-right">导出</span>}
                       </div>
+                      {/* 数据行 */}
+                      {flatStats.map((row, idx) => <div key={`${row.mainCategory}-${row.subCategory}-${row.thirdCategory}-${idx}`} className="flex items-center py-2.5 border-b border-[#F0E6D8]/50 hover:bg-[#FFF8F0] transition-colors text-sm">
+                          <span className="w-[130px] text-gray-700 text-[11px] truncate">{row.mainCategory}</span>
+                          <span className="w-[130px] text-gray-600 text-[11px] truncate">{row.subCategory}</span>
+                          <span className="w-[160px] text-gray-500 text-[11px] truncate">{row.thirdCategory}</span>
+                          <span className="w-[110px] text-center font-semibold text-[#E8724A] text-sm">{row.totalQty}</span>
+                          <span className="w-[70px] text-center text-xs text-gray-400">{row.unit || '-'}</span>
+                          <span className="w-[100px] text-center">
+                            <button onClick={() => showSubDetail(row.mainCategory, row.subCategory)} className="text-[#2D6A4F] text-xs hover:underline flex items-center justify-center gap-0.5"><Eye size={11} /> 查看</button>
+                          </span>
+                          {isAdmin && <span className="w-[100px] text-right">
+                              <button onClick={() => exportByCategory(row.mainCategory, row.subCategory, row.thirdCategory)} className="text-[#E8724A] text-xs hover:underline flex items-center justify-end gap-0.5"><Download size={11} /> 导出明细</button>
+                            </span>}
+                        </div>)}
+                      {flatStats.length === 0 && <p className="text-center text-gray-400 py-6 text-sm">暂无匹配的统计数据</p>}
                     </div>
                   </div>
-                </div>}
+                </div>
+              </div>}
         </div>}
 
       {/* ======= 时间趋势 Tab ======= */}
@@ -498,47 +492,45 @@ export default function StatisticsPage(props) {
           </div>
         </div>}
 
-      {/* ======= 三级分类详情弹窗 ======= */}
+      {/* ======= 小类详情弹窗 ======= */}
       {detailSub && <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={() => setDetailSub(null)}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
           <div className="relative bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="sticky top-0 bg-white border-b border-[#F0E6D8] px-5 py-4 z-10">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-gray-400 font-sans">{detailSub.mainCategory} / {detailSub.subCategory} / {detailSub.thirdCategory}</p>
-                  <h3 className="font-serif font-semibold text-[#1B1B2F] text-lg">{detailSub.thirdCategory}</h3>
+                  <p className="text-xs text-gray-400 font-sans">{detailSub.mainCategory} / {detailSub.subCategory}</p>
+                  <h3 className="font-serif font-semibold text-[#1B1B2F] text-lg">{detailSub.subCategory}</h3>
                 </div>
                 <button onClick={() => setDetailSub(null)} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200"><X size={16} className="text-gray-500" /></button>
               </div>
-              <p className="text-xs text-gray-400 font-sans mt-1">共 {detailRecords.length} 条记录</p>
+              <p className="text-xs text-gray-400 font-sans mt-1">共 {detailRecords.length} 条 · 累计 {detailRecords.reduce((s, r) => s + (r.quantity || 0), 0)} 件</p>
             </div>
             <div className="overflow-y-auto max-h-[60vh] px-5 py-3">
               {detailRecords.length === 0 ? <p className="text-center text-gray-400 py-8 text-sm">暂无记录</p> : <>
                     <div className="overflow-x-auto">
                       <div className="min-w-[900px]">
                         <div className="flex items-center text-[10px] text-gray-400 font-sans py-2 border-b border-[#F0E6D8]">
-                          <span className="w-[60px] text-center">序号</span>
-                          <span className="w-[90px]">捐赠人</span>
+                          <span className="w-[100px] pl-1">三级分类</span>
                           <span className="w-[60px] text-center">件数</span>
-                          <span className="w-[70px] text-center">规格数量</span>
+                          <span className="w-[70px] text-center">数量</span>
                           <span className="w-[60px] text-center">单位</span>
                           <span className="w-[70px] text-center">单价</span>
                           <span className="w-[80px] text-center">总价</span>
-                          <span className="w-[120px] text-center">快递单号</span>
-                          <span className="w-[100px] text-center">预计到达</span>
-                          <span className="w-[120px] text-center">登记时间</span>
+                          <span className="w-[110px] text-center">快递单号</span>
+                          <span className="w-[100px] text-center">捐赠人</span>
+                          <span className="w-[100px] text-center">登记时间</span>
                         </div>
                         {detailRecords.map((r, idx) => <div key={r._id || idx} className="flex items-start py-2.5 border-b border-[#F0E6D8]/50 text-sm">
-                            <span className="w-[60px] text-center text-gray-400 text-[10px]">{idx + 1}</span>
-                            <span className="w-[90px] text-[#1B1B2F] text-[11px] font-medium truncate">{r.donor || '-'}</span>
+                            <span className="w-[100px] text-gray-500 text-[11px] truncate pl-1">{r.category?.thirdCategory || r.category?.spec || '-'}</span>
                             <span className="w-[60px] text-center text-gray-700">{r.quantity || 0}</span>
                             <span className="w-[70px] text-center text-[#E8724A] font-semibold text-[11px]">{r.quantityDisplay || r.quantity || 0}</span>
                             <span className="w-[60px] text-center text-gray-400 text-[10px]">{r.unit || '-'}</span>
                             <span className="w-[70px] text-center text-gray-500 text-[10px]">¥{r.price || 0}</span>
                             <span className="w-[80px] text-center text-gray-700 text-[11px]">¥{((r.price || 0) * (r.quantity || 0)).toFixed(0)}</span>
-                            <span className="w-[120px] text-center text-gray-400 text-[9px] truncate" title={r.trackingNumber}>{r.trackingNumber || '-'}</span>
-                            <span className="w-[100px] text-center text-gray-400 text-[10px]">{r.estimatedArrival ? r.estimatedArrival.slice(5) : '-'}</span>
-                            <span className="w-[120px] text-center text-gray-400 text-[10px]">{r.createdAt ? r.createdAt.slice(0, 10) : '-'}</span>
+                            <span className="w-[110px] text-center text-gray-400 text-[9px] truncate">{r.trackingNumber || '-'}</span>
+                            <span className="w-[100px] text-center text-[#1B1B2F] text-[11px] truncate">{r.donor || '-'}</span>
+                            <span className="w-[100px] text-center text-gray-400 text-[10px]">{r.createdAt ? r.createdAt.slice(0, 10) : '-'}</span>
                           </div>)}
                       </div>
                     </div>

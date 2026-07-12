@@ -68,6 +68,12 @@ export default function StatisticsPage(props) {
   const totalQuantity = records.reduce((s, r) => s + (r.quantity || 0), 0);
   const totalValue = records.reduce((s, r) => s + (r.price || 0) * (r.quantity || 0), 0);
   const uniqueDonors = [...new Set(records.map(r => r.donor).filter(Boolean))].length;
+  const getActualTotal = r => {
+    const display = r.quantityDisplay || String(r.quantity || 0);
+    const parts = String(display).split('*').map(s => parseFloat(s.trim()) || 0);
+    if (parts.length === 2) return parts[0] * parts[1];
+    return parts[0];
+  };
 
   // 时间趋势
   const byDate = records.reduce((acc, r) => {
@@ -78,7 +84,7 @@ export default function StatisticsPage(props) {
       value: 0,
       count: 0
     };
-    acc[date].quantity += r.quantity || 0;
+    acc[date].quantity += getActualTotal(r);
     acc[date].value += (r.price || 0) * (r.quantity || 0);
     acc[date].count += 1;
     return acc;
@@ -344,40 +350,51 @@ export default function StatisticsPage(props) {
                     </div>
                     {isAdmin && <button onClick={() => exportByCategory(mainCat)} className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white text-xs text-gray-600 font-sans hover:bg-gray-50 shadow-sm"><Download size={12} /> 导出</button>}
                   </div>
-                  {/* 表头 */}
+                  {/* 表头 - 增加列宽与滚动 */}
                   <div className="px-5 pt-4">
-                    <div className="flex items-center text-xs text-gray-400 font-sans py-2 border-b border-[#F0E6D8]">
-                      <span className="flex-1">二级分类</span>
-                      <span className="w-20 text-center">三级分类</span>
-                      <span className="w-20 text-center flex items-center justify-center gap-1 cursor-pointer" onClick={() => setSortOrder(p => ({
-                key: 'totalQty',
-                dir: p.dir === 'desc' ? 'asc' : 'desc'
-              }))}>
-                        统计总数 {sortOrder.dir === 'desc' ? <ArrowDown size={12} /> : <ArrowUp size={12} />}
-                      </span>
-                      <span className="w-16 text-center">单位</span>
-                      {isAdmin && <span className="w-16 text-right">操作</span>}
-                    </div>
-                    {/* 行 */}
-                    {subStats.map(sub => <div key={sub.name}>
-                        <div className="flex items-center py-2.5 border-b border-[#F0E6D8]/50 hover:bg-[#FFF8F0] transition-colors">
-                          <span className="flex-1 text-sm text-[#1B1B2F] font-medium">{sub.name}</span>
-                          <span className="w-20 text-center text-xs text-gray-500">{sub.thirdStats.map(t => t.name).join(', ') || '-'}</span>
-                          <span className="w-20 text-center text-sm font-semibold text-[#E8724A]">{sub.totalQty}</span>
-                          <span className="w-16 text-center text-xs text-gray-400">{sub.thirdStats[0]?.unit || '-'}</span>
-                          {isAdmin && <span className="w-16 text-right">
-                              <button onClick={() => exportByCategory(mainCat, sub.name)} className="text-[#E8724A] text-xs hover:underline">导出</button>
-                            </span>}
+                    <div className="overflow-x-auto">
+                      <div className="min-w-[800px]">
+                        <div className="flex items-center text-xs text-gray-400 font-sans py-2 border-b border-[#F0E6D8]">
+                          <span className="flex-1 min-w-[120px]">二级分类</span>
+                          <span className="w-[120px] text-center">三级分类</span>
+                          <span className="w-[100px] text-center flex items-center justify-center gap-1 cursor-pointer" onClick={() => setSortOrder(p => ({
+                    key: 'totalQty',
+                    dir: p.dir === 'desc' ? 'asc' : 'desc'
+                  }))}>
+                            统计总数 {sortOrder.dir === 'desc' ? <ArrowDown size={12} /> : <ArrowUp size={12} />}
+                          </span>
+                          <span className="w-[80px] text-center">单位</span>
+                          <span className="w-[80px] text-center">查看</span>
+                          {isAdmin && <span className="w-[80px] text-right">导出</span>}
                         </div>
-                        {/* 三级分类明细 */}
-                        {sub.thirdStats.map(t => <div key={t.name} className="flex items-center pl-6 py-2 border-b border-[#F0E6D8]/30 text-xs text-gray-500 hover:bg-[#FFF8F0]">
-                            <span className="flex-1 text-gray-400">{t.name}</span>
-                            <span className="w-20 text-center text-gray-400">-</span>
-                            <span className="w-20 text-center font-medium text-[#1B1B2F]">{t.totalQty}</span>
-                            <span className="w-16 text-center text-gray-400">{t.unit || '-'}</span>
-                            {isAdmin && <span className="w-16 text-right"></span>}
+                        {/* 行 */}
+                        {subStats.map(sub => <div key={sub.name}>
+                            <div className="flex items-center py-2.5 border-b border-[#F0E6D8]/50 hover:bg-[#FFF8F0] transition-colors">
+                              <span className="flex-1 text-sm text-[#1B1B2F] font-medium">{sub.name}</span>
+                              <span className="w-[120px] text-center text-xs text-gray-500">{sub.thirdStats.map(t => t.name).join(', ') || '-'}</span>
+                              <span className="w-[100px] text-center text-sm font-semibold text-[#E8724A]">{sub.totalQty}</span>
+                              <span className="w-[80px] text-center text-xs text-gray-400">{sub.thirdStats[0]?.unit || '-'}</span>
+                              <span className="w-[80px] text-center">
+                                <button onClick={() => showSubDetail(mainCat, sub.name)} className="text-[#2D6A4F] text-xs hover:underline flex items-center justify-center gap-0.5 mx-auto"><Eye size={11} /> 查看</button>
+                              </span>
+                              {isAdmin && <span className="w-[80px] text-right">
+                                  <button onClick={() => exportByCategory(mainCat, sub.name)} className="text-[#E8724A] text-xs hover:underline">导出</button>
+                                </span>}
+                            </div>
+                            {/* 三级分类明细 */}
+                            {sub.thirdStats.map(t => <div key={t.name} className="flex items-center pl-6 py-2 border-b border-[#F0E6D8]/30 text-xs text-gray-500 hover:bg-[#FFF8F0]">
+                                <span className="flex-1 text-gray-400">{t.name}</span>
+                                <span className="w-[120px] text-center text-gray-400">-</span>
+                                <span className="w-[100px] text-center font-medium text-[#1B1B2F]">{t.totalQty}</span>
+                                <span className="w-[80px] text-center text-gray-400">{t.unit || '-'}</span>
+                                <span className="w-[80px] text-center">
+                                  <button onClick={() => showSubDetail(mainCat, sub.name)} className="text-[#2D6A4F] text-xs hover:underline">查看</button>
+                                </span>
+                                {isAdmin && <span className="w-[80px] text-right"></span>}
+                              </div>)}
                           </div>)}
-                      </div>)}
+                      </div>
+                    </div>
                   </div>
                   {/* 点击查看明细 */}
                   <div className="px-5 pb-4">
@@ -432,7 +449,7 @@ export default function StatisticsPage(props) {
             }} activeDot={{
               r: 6,
               fill: '#E8724A'
-            }} name="数量(件)" />
+            }} name="数量" />
                 </LineChart>
               </ResponsiveContainer> : <p className="text-center text-gray-400 py-8 text-sm">暂无数据</p>}
           </div>
@@ -449,7 +466,7 @@ export default function StatisticsPage(props) {
                         <span className="text-xs text-gray-400 font-sans">{day.count}次登记</span>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm font-semibold text-[#1B1B2F]">{day.quantity}件</p>
+                        <p className="text-sm font-semibold text-[#1B1B2F]">{day.quantity}</p>
                         <p className="text-xs text-[#2D6A4F]">¥{day.value}</p>
                       </div>
                     </button>
@@ -468,7 +485,7 @@ export default function StatisticsPage(props) {
                     totalQty: 0,
                     count: 0
                   };
-                  grouped[k].totalQty += r.quantity || 0;
+                  grouped[k].totalQty += getActualTotal(r);
                   grouped[k].count += 1;
                 });
                 return Object.values(grouped).map(g => <div key={g.name} className="flex items-center justify-between py-1.5 border-b border-[#F0E6D8]/30 last:border-0 text-sm">
@@ -541,16 +558,36 @@ export default function StatisticsPage(props) {
               </div>
             </div>
             <div className="overflow-y-auto max-h-[60vh] px-5 py-3 space-y-3">
-              {dateDetailRecords.map(group => <div key={group.name} className="bg-[#FFFBF5] rounded-2xl p-4">
-                  <h4 className="font-serif font-semibold text-[#1B1B2F] mb-2 flex items-center gap-2"><Package size={14} className="text-[#E8724A]" /> {group.name}</h4>
-                  <div className="space-y-1">
-                    {group.items.map((r, i) => <div key={i} className="flex items-center justify-between text-xs text-gray-600 font-sans py-1 border-b border-[#F0E6D8]/30">
-                        <span>{r.donor || '匿名'} · {r.quantity}件</span>
-                        <span className="text-[#E8724A]">{r.quantityDisplay || r.quantity}{r.unit || ''} · ¥{((r.price || 0) * (r.quantity || 0)).toFixed(0)}</span>
-                      </div>)}
+              {dateDetailRecords[0]?.items ? <>
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[1000px]">
+                      <div className="flex items-center text-[10px] text-gray-400 font-sans py-2 border-b border-[#F0E6D8]">
+                        <span className="w-[50px] text-center">序号</span>
+                        <span className="w-[90px]">捐赠人</span>
+                        <span className="w-[100px]">三级分类</span>
+                        <span className="w-[80px] text-center">物品名称</span>
+                        <span className="w-[60px] text-center">数量</span>
+                        <span className="w-[50px] text-center">单位</span>
+                        <span className="w-[70px] text-center">单价</span>
+                        <span className="w-[80px] text-center">总价</span>
+                        <span className="w-[120px] text-center">快递单号</span>
+                        <span className="w-[90px] text-center">预计到达</span>
+                      </div>
+                      {dateDetailRecords.flatMap(g => g.items).map((r, idx) => <div key={r._id || idx} className="flex items-start py-2.5 border-b border-[#F0E6D8]/50 hover:bg-[#FFFBF5]">
+                          <span className="w-[50px] text-center text-gray-400 text-[10px]">{idx + 1}</span>
+                          <span className="w-[90px] text-[#1B1B2F] text-[11px] font-medium truncate">{r.donor || '-'}</span>
+                          <span className="w-[100px] text-gray-500 text-[10px] truncate">{r.category?.thirdCategory || r.category?.spec || '-'}</span>
+                          <span className="w-[80px] text-center text-gray-600 text-[10px] truncate">{r.itemName || '-'}</span>
+                          <span className="w-[60px] text-center font-semibold text-[#E8724A] text-[11px]">{r.quantity || 0}</span>
+                          <span className="w-[50px] text-center text-gray-400 text-[10px]">{r.unit || '-'}</span>
+                          <span className="w-[70px] text-center text-gray-500 text-[10px]">¥{r.price || 0}</span>
+                          <span className="w-[80px] text-center text-gray-700 text-[11px]">¥{((r.price || 0) * (r.quantity || 0)).toFixed(0)}</span>
+                          <span className="w-[120px] text-center text-gray-400 text-[9px] truncate" title={r.trackingNumber}>{r.trackingNumber || '-'}</span>
+                          <span className="w-[90px] text-center text-gray-400 text-[10px]">{r.estimatedArrival ? r.estimatedArrival.slice(5) : '-'}</span>
+                        </div>)}
+                    </div>
                   </div>
-                </div>)}
-              {dateDetailRecords.length === 0 && <p className="text-center text-gray-400 py-4 text-sm">暂无详细数据</p>}
+                </> : <p className="text-center text-gray-400 py-4 text-sm">暂无详细数据</p>}
             </div>
           </div>
         </div>}

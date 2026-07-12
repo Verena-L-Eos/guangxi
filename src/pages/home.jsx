@@ -1,7 +1,7 @@
 // @ts-ignore;
 import React, { useState, useEffect } from 'react';
 // @ts-ignore;
-import { Package, ClipboardList, BarChart3, Tags, Heart, Gift } from 'lucide-react';
+import { Package, ClipboardList, BarChart3, Tags, Heart } from 'lucide-react';
 
 import { NavBar } from '@/components/NavBar.jsx';
 export default function HomePage(props) {
@@ -73,16 +73,6 @@ export default function HomePage(props) {
               </button>;
         })}
         </div>
-        {/* Admin-only entry */}
-        {isAdmin && <button onClick={() => navigate('donation-suggestions')} className="mt-4 w-full bg-white rounded-2xl p-4 shadow-[0_2px_12px_rgba(0,0,0,0.06)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] transition-all duration-300 flex items-center gap-4 group">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#6A0572] to-[#C77DFF] flex items-center justify-center shadow-md group-hover:scale-110 transition-transform duration-300">
-              <Gift size={22} className="text-white" />
-            </div>
-            <div className="flex-1 text-left">
-              <h3 className="font-serif font-semibold text-base text-[#1B1B2F]">建议捐赠类别</h3>
-              <p className="text-xs text-gray-400 font-sans mt-1">管理员管理建议物资需求</p>
-            </div>
-          </button>}
       </div>
 
       {/* Footer */}

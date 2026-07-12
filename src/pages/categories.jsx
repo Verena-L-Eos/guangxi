@@ -100,7 +100,12 @@ export default function CategoriesPage(props) {
     } = inlineAdd;
 
     // Dedup check
-    if (level === 'second') {
+    if (level === 'main') {
+      if (mainSet.has(val)) {
+        alert(`大类「${val}」已存在`);
+        return;
+      }
+    } else if (level === 'second') {
       if (secondMap[parentMain]?.has(val)) {
         alert(`二级分类「${val}」已存在`);
         return;
@@ -124,14 +129,20 @@ export default function CategoriesPage(props) {
       const db = tcb.database();
       const doc = {
         mainCategory: parentMain,
-        subCategory: parentSecond || val,
-        thirdCategory: parentThird || (level === 'third' ? val : level === 'second' ? '' : ''),
-        spec: parentThird || (level === 'third' ? val : level === 'second' ? '' : ''),
+        subCategory: parentSecond || (level === 'second' ? val : ''),
+        thirdCategory: parentThird || (level === 'third' ? val : ''),
+        spec: parentThird || (level === 'third' ? val : ''),
         unit: level === 'unit' ? val : '',
         createdAt: new Date().toISOString()
       };
-      // Adjust: for second level, subCategory is the new value
-      if (level === 'second') {
+      // Adjust per level
+      if (level === 'main') {
+        doc.mainCategory = val;
+        doc.subCategory = '';
+        doc.thirdCategory = '';
+        doc.spec = '';
+        doc.unit = '';
+      } else if (level === 'second') {
         doc.subCategory = val;
         doc.thirdCategory = '';
         doc.spec = '';

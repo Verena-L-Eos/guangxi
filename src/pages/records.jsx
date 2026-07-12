@@ -176,25 +176,25 @@ export default function RecordsPage(props) {
             <div className="space-y-3">
                         <div className="grid grid-cols-2 gap-3">
                           <div>
-                            <label className="block text-xs text-gray-500 mb-1 font-sans">规格（支持算式如 "24*500"）</label>
+                            <label className="block text-xs text-gray-500 mb-1 font-sans">规格（可选，支持算式如 "24*500"）</label>
                             <input type="text" value={editForm.quantityDisplay} onChange={e => setEditForm({
                     ...editForm,
                     quantityDisplay: e.target.value
-                  })} className="w-full px-3 py-2 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30" />
+                  })} placeholder="可选" className="w-full px-3 py-2 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30" />
                           </div>
                           <div>
-                            <label className="block text-xs text-gray-500 mb-1 font-sans">件数</label>
+                            <label className="block text-xs text-gray-500 mb-1 font-sans">件数（可选）</label>
                             <input type="number" min="1" value={editForm.pieces} onChange={e => setEditForm({
                     ...editForm,
                     pieces: parseInt(e.target.value) || 1
-                  })} className="w-full px-3 py-2 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30" />
+                  })} placeholder="可选" className="w-full px-3 py-2 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30" />
                           </div>
                           <div>
-                            <label className="block text-xs text-gray-500 mb-1 font-sans">单价</label>
+                            <label className="block text-xs text-gray-500 mb-1 font-sans">单价（可选）</label>
                             <input type="number" step="0.01" value={editForm.price} onChange={e => setEditForm({
                     ...editForm,
                     price: e.target.value
-                  })} placeholder="请输入每件的单价" className="w-full px-3 py-2 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30" />
+                  })} placeholder="可选，留空则不统计金额" className="w-full px-3 py-2 rounded-xl border border-[#F0E6D8] bg-[#FFFBF5] text-sm font-sans focus:outline-none focus:ring-2 focus:ring-[#E8724A]/30" />
                           </div>
                         </div>
                         <div>
@@ -250,7 +250,7 @@ export default function RecordsPage(props) {
                               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#FFE8D6] text-[#E8724A] text-xs font-sans"><Package size={10} /> {record.category?.subCategory || record.category?.mainCategory || '未分类'}</span>
                               {record.category?.thirdCategory && <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#FFF8E1] text-amber-700 text-xs font-sans">{record.category.thirdCategory}</span>}
                               {record.category?.spec && !record.category?.thirdCategory && <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#FFF8E1] text-amber-700 text-xs font-sans">{record.category.spec}</span>}
-                              {record.quantityDisplay && <span className="text-xs text-gray-400 font-sans">规格：{record.quantityDisplay}</span>}
+                              {record.quantityDisplay && <span className="text-xs text-gray-400 font-sans">规格：{record.quantityDisplay}{record.unit}</span>}
                               {record.pieces != null && <span className="text-xs text-gray-400 font-sans">件数：{record.pieces}</span>}
                             </div>
                             <div className="mt-2 space-y-1">

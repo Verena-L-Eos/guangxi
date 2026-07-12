@@ -62,18 +62,20 @@ export default function StatisticsPage(props) {
     $w.utils.navigateBack();
   };
 
-  // 指标
-  const totalDonations = records.length;
-  const totalPackages = [...new Set(records.map(r => r.trackingNumber).filter(Boolean))].length;
-  const totalQuantity = records.reduce((s, r) => s + getActualTotal(r), 0);
-  const totalValue = records.reduce((s, r) => s + (r.price || 0) * getActualTotal(r), 0);
-  const uniqueDonors = [...new Set(records.map(r => r.donor).filter(Boolean))].length;
+  // 解析实际总数（数量×件数）：数量算式如 "24*500" → 12000
   const getActualTotal = r => {
     const display = r.quantityDisplay || String(r.quantity || 0);
     const parts = String(display).split('*').map(s => parseFloat(s.trim()) || 0);
     if (parts.length === 2) return parts[0] * parts[1];
     return parts[0];
   };
+
+  // 指标
+  const totalDonations = records.length;
+  const totalPackages = [...new Set(records.map(r => r.trackingNumber).filter(Boolean))].length;
+  const totalQuantity = records.reduce((s, r) => s + getActualTotal(r), 0);
+  const totalValue = records.reduce((s, r) => s + (r.price || 0) * getActualTotal(r), 0);
+  const uniqueDonors = [...new Set(records.map(r => r.donor).filter(Boolean))].length;
 
   // 时间趋势
   const byDate = records.reduce((acc, r) => {
